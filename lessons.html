@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Network Simulator — Guided Lessons</title>
+
+<!--
+  ============================================================================
+  NETWORK SIMULATOR  —  GUIDED LESSONS
+  ============================================================================
+  A companion workbook for `network-simulator.html`.
+
+  Each lesson contains:
+    1. A brief introduction to a device or concept.
+    2. Instructions for exploring it in the simulator.
+    3. Three tasks to complete in the simulator.
+    4. Up to five questions to answer afterwards.
+
+  Printing: the stylesheet includes @media print rules so each lesson starts on
+  a new page. Use your browser's Print dialog (Ctrl/Cmd + P) and, if desired,
+  enable "Background graphics" for the coloured headings.
+  ============================================================================
+-->
+
+<style>
+  /* ==========================================================================
+     DESIGN SYSTEM  —  mirrors network-simulator.html for a consistent look
+     ========================================================================== */
+  :root {
+    --bg:            #ffffff;
+    --surface:       #ffffff;
+    --surface-alt:   #f7f8fa;
+    --border:        #e4e7ec;
+    --border-strong: #d0d5dd;
+    --text:          #1a1d23;
+    --text-muted:    #667085;
+    --text-faint:    #98a2b3;
+
+    --accent:        #2563eb;
+    --accent-soft:   #eff4ff;
+
+    --secure:        #16a34a;
+    --secure-soft:   #eafaf0;
+    --danger:        #dc2626;
+    --danger-soft:   #fdecec;
+    --warning:       #d97706;
+    --warning-soft:  #fef6e7;
+    --info:          #0891b2;
+
+    --radius:        10px;
+    --radius-sm:     7px;
+    --shadow-sm:     0 1px 2px rgba(16,24,40,0.05);
+    --shadow-md:     0 4px 12px rgba(16,24,40,0.08);
+
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+            Arial, "Inter", sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--surface-alt);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ==========================================================================
+     LAYOUT
+     ========================================================================== */
+  .page-wrap { max-width: 820px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  /* Document cover / header */
+  .cover {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 32px 34px;
+    margin-bottom: 28px;
+  }
+  .cover .eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .cover h1 { font-size: 30px; margin: 6px 0 8px; letter-spacing: -0.02em; }
+  .cover p { color: var(--text-muted); margin: 0 0 4px; }
+  .cover .logo {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), #7c3aed);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 18px; margin-bottom: 12px;
+  }
+
+  /* Table of contents */
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 20px 24px;
+    margin-bottom: 28px;
+  }
+  .toc h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); margin: 0 0 12px; }
+  .toc ol { margin: 0; padding-left: 22px; }
+  .toc li { margin: 5px 0; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* ==========================================================================
+     LESSON CARD
+     ========================================================================== */
+  .lesson {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 30px 34px;
+    margin-bottom: 26px;
+  }
+  .lesson-head {
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 14px; margin-bottom: 18px;
+  }
+  .lesson-num {
+    display: inline-block;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: #fff; background: var(--accent);
+    padding: 3px 10px; border-radius: 999px; margin-bottom: 10px;
+  }
+  .lesson h2 { font-size: 23px; margin: 0; letter-spacing: -0.01em; }
+  .lesson h3 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-faint); margin: 26px 0 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .lesson h3::before {
+    content: ''; width: 14px; height: 2px; background: var(--accent); display: inline-block;
+  }
+  .lesson p { margin: 0 0 12px; }
+  .lesson ul, .lesson ol { margin: 0 0 12px; padding-left: 22px; }
+  .lesson li { margin: 6px 0; }
+
+  /* Tasks */
+  .tasks { counter-reset: task; list-style: none; padding-left: 0; }
+  .tasks > li {
+    position: relative;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px 12px 46px;
+    margin: 10px 0;
+  }
+  .tasks > li::before {
+    counter-increment: task;
+    content: counter(task);
+    position: absolute; left: 12px; top: 12px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Questions */
+  .questions { counter-reset: q; list-style: none; padding-left: 0; }
+  .questions > li {
+    position: relative;
+    padding: 10px 0 10px 34px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .questions > li:last-child { border-bottom: none; }
+  .questions > li::before {
+    counter-increment: q;
+    content: "Q" counter(q);
+    position: absolute; left: 0; top: 10px;
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    color: var(--accent);
+  }
+
+  /* Inline helpers */
+  code, .cmd {
+    font-family: var(--mono); font-size: 0.86em;
+    background: var(--surface-alt); border: 1px solid var(--border);
+    border-radius: 5px; padding: 1px 6px; color: var(--text);
+  }
+  .kbd {
+    font-family: var(--mono); font-size: 12px; background: var(--surface-alt);
+    border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px;
+    padding: 1px 6px; color: var(--text-muted);
+  }
+  strong { color: var(--text); }
+
+  /* Callout boxes */
+  .note {
+    border-radius: var(--radius-sm); padding: 12px 14px; margin: 14px 0;
+    font-size: 14px; border: 1px solid var(--border); background: var(--surface-alt);
+  }
+  .note.tip     { border-color: #bfe6cd; background: var(--secure-soft); }
+  .note.warn    { border-color: #f5d9a8; background: var(--warning-soft); }
+  .note.info    { border-color: #bae6fd; background: #ecfbff; }
+  .note .label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    display: block; margin-bottom: 4px;
+  }
+  .note.tip  .label { color: var(--secure); }
+  .note.warn .label { color: var(--warning); }
+  .note.info .label { color: var(--info); }
+
+  /* Colour-key chips (mirrors the simulator's packet colours) */
+  .keyline { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 4px; }
+  .keychip {
+    font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .keychip .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .dot.green { background: var(--secure); }
+  .dot.red   { background: var(--danger); }
+  .dot.amber { background: var(--warning); }
+  .dot.blue  { background: var(--accent); }
+  .dot.cyan  { background: var(--info); }
+
+  /* ==========================================================================
+     PRINT  —  each lesson on its own page; tidy, ink-friendly output
+     ========================================================================== */
+  @media print {
+    /* A4 with sensible margins; each printed page gets a footer with numbers. */
+    @page { size: A4; margin: 16mm 14mm; }
+
+    html, body { background: #fff; font-size: 11.5pt; }
+    .page-wrap { max-width: none; margin: 0; padding: 0; }
+
+    /* Remove screen chrome (shadows/heavy borders) for clean print. */
+    .cover, .toc, .lesson {
+      box-shadow: none; border: none; padding: 0; margin: 0;
+    }
+
+    /* Cover + TOC each get their own page. */
+    .cover { page-break-after: always; }
+    .toc   { page-break-after: always; }
+    .toc a { color: var(--text); text-decoration: none; }
+
+    /* Every lesson starts on a new page. */
+    .lesson { page-break-before: always; padding-top: 4mm; }
+    .lesson:first-of-type { page-break-before: avoid; }
+
+    /* Avoid awkward splits. */
+    .lesson-head, .note, .tasks > li, .questions > li { page-break-inside: avoid; }
+    h2, h3 { page-break-after: avoid; }
+
+    /* Keep the accent colours readable but light on ink. */
+    .lesson-num { background: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .tasks > li { background: #fff; border-left-color: #000; }
+    .tasks > li::before { background: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    /* Provide writing space after each question when printed. */
+    .questions > li { padding-bottom: 26px; }
+
+    .no-print { display: none !important; }
+  }
+</style>
+</head>
+
+<body>
+<div class="page-wrap">
+
+  <!-- ======================================================================
+       COVER
+       ====================================================================== -->
+  <header class="cover">
+    <div class="logo">◈</div>
+    <div class="eyebrow">IB Computer Science</div>
+    <h1>Network Simulator — Guided Lessons</h1>
+    <p>A workbook to accompany <code>network-simulator.html</code>.</p>
+    <p>Work through each lesson in order. Open the simulator in a separate browser tab and keep it beside this document. Every lesson asks you to build or change something, observe what happens, and then answer questions based on what you saw.</p>
+
+    <div class="keyline" style="margin-top:14px">
+      <span class="keychip"><span class="dot blue"></span> request</span>
+      <span class="keychip"><span class="dot green"></span> secure / reply</span>
+      <span class="keychip"><span class="dot red"></span> dropped / plaintext</span>
+      <span class="keychip"><span class="dot amber"></span> warning</span>
+      <span class="keychip"><span class="dot cyan"></span> DHCP / info</span>
+    </div>
+    <p style="margin-top:10px; font-size:13px; color:var(--text-faint)">These are the packet colours used throughout the simulator. Refer back to them as you observe traffic.</p>
+  </header>
+
+  <!-- ======================================================================
+       TABLE OF CONTENTS
+       ====================================================================== -->
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#l1">The IP model: LAN, subnet and the router as gateway</a></li>
+      <li><a href="#l2">DHCP: obtaining IP addresses dynamically</a></li>
+      <li><a href="#l3">DNS: zones, A and CNAME records, and resolution</a></li>
+      <li><a href="#l4">Web servers: hosting page content</a></li>
+      <li><a href="#l5">The terminal: ping, nslookup, curl, ipconfig</a></li>
+      <li><a href="#l6">Firewalls and filtering traffic</a></li>
+      <li><a href="#l7">TLS certificates and Let's Encrypt</a></li>
+      <li><a href="#l8">Denial of service (DDoS) and rate limiting</a></li>
+      <li><a href="#l9">Man-in-the-middle interception</a></li>
+      <li><a href="#l10">Unsecured protocols (ports 80, 21, 25)</a></li>
+      <li><a href="#l11">Application attacks: phishing, SQL injection, XSS</a></li>
+      <li><a href="#l12">Expired and missing certificates</a></li>
+    </ol>
+  </nav>
+
+  <!-- ======================================================================
+       LESSON 1 — IP MODEL
+       ====================================================================== -->
+  <section class="lesson" id="l1">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 1</span>
+      <h2>The IP model: LAN, subnet and the router as gateway</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>A <strong>Local Area Network (LAN)</strong> is a group of devices that share the same physical or logical network, such as the computers in one classroom. Every device on an IP network needs an <strong>IP address</strong>: a numerical label that identifies it. In this simulator the LAN uses addresses that start with <code>192.168.1.</code> — this is the <strong>network prefix</strong>. The final number (the <strong>host part</strong>) is different for each device.</p>
+    <p>A <strong>subnet mask</strong> (here <code>255.255.255.0</code>) tells a device which part of an address is the network and which part is the host. Devices with the same network prefix can talk to each other directly. To reach anything outside the LAN, traffic is sent to the <strong>default gateway</strong> — the router. The router sits between the LAN and the wider network (the WAN or internet) and forwards traffic between them. In this simulator the router takes address <code>192.168.1.1</code> by default.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>Add a <strong>Router</strong> to the canvas and click it. In the configuration panel note its <strong>LAN IP (gateway)</strong>, <strong>subnet mask</strong>, and <strong>WAN IP (public)</strong>.</li>
+      <li>Add a <strong>PC</strong>, a <strong>Switch</strong>, and a <strong>Server</strong>. Use <span class="kbd">🔗 Connect</span> to wire them: PC → Switch → Router → Server.</li>
+      <li>Give devices addresses (the next lesson covers how) and watch the IP appear beneath each device on the canvas.</li>
+    </ul>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Build a LAN containing at least two PCs, one switch, one router and one server, all connected so that every device has a path to the router.</li>
+      <li>Select the router and record its LAN IP, its subnet mask, and its WAN IP. Explain to yourself why the LAN and WAN addresses have different prefixes.</li>
+      <li>Give two PCs addresses and confirm on the canvas that they share the same first three octets (network prefix) but differ in the final octet (host part).</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>What is the purpose of the network prefix, and how does the subnet mask <code>255.255.255.0</code> separate the network part of an address from the host part?</li>
+      <li>Two PCs on the LAN have addresses <code>192.168.1.100</code> and <code>192.168.1.150</code>. Are they on the same subnet? Justify your answer using the subnet mask.</li>
+      <li>What is a default gateway, and why does a PC need to know its gateway's address to reach a device outside the LAN?</li>
+      <li>The router has both a LAN IP and a separate WAN IP. Explain the role of each.</li>
+      <li>How many usable host addresses does a <code>/24</code> network (mask <code>255.255.255.0</code>) provide, and why is that number not simply 256?</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 2 — DHCP
+       ====================================================================== -->
+  <section class="lesson" id="l2">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 2</span>
+      <h2>DHCP: obtaining IP addresses dynamically</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>Assigning an address to every device by hand does not scale. The <strong>Dynamic Host Configuration Protocol (DHCP)</strong> automates this. A DHCP server holds a <strong>pool</strong> of available addresses and hands one out to each device that asks. The assignment is called a <strong>lease</strong>: it is temporary and can be returned (released) when no longer needed. Along with an IP address, DHCP also supplies the <strong>gateway</strong> address and the address of the <strong>DNS server</strong> the client should use.</p>
+    <p>In this simulator the router runs the DHCP server. Its default pool is <code>192.168.1.100</code> to <code>192.168.1.199</code>. When a PC requests an address, the server picks the lowest free number in the pool and records the lease.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>Select the router and find the <strong>DHCP Server</strong> section. Confirm the toggle is on and read the <strong>Pool</strong> range and <strong>Active leases</strong> count.</li>
+      <li>Select a PC and click <span class="kbd">📥 Request IP (DHCP)</span>. Watch the cyan handshake animation travel to the router and back before the lease is confirmed in the log.</li>
+      <li>Note that a PC which is not connected to the router by any path cannot receive a lease — the simulator reports this in the feedback log.</li>
+    </ul>
+
+    <div class="note info">
+      <span class="label">Observe</span>
+      The DHCP exchange is shown with cyan packets. After a successful lease, the PC's IP, gateway and DNS values populate in its configuration panel and its IP appears on the canvas.
+    </div>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Lease addresses to three PCs one after another. Record the address each one receives and confirm they are allocated in ascending order from the pool.</li>
+      <li>Release one PC's lease, then have a new PC request an address. Observe which address the new PC is given and explain the result.</li>
+      <li>Disconnect a PC from the network (delete its link), then attempt a DHCP request. Record the message the simulator returns and why it occurs.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>List the four pieces of configuration a client typically receives from DHCP in this simulator, and state what each is used for.</li>
+      <li>Why is an address described as a "lease" rather than a permanent assignment? Give one advantage of leasing.</li>
+      <li>The default pool runs from <code>.100</code> to <code>.199</code>. What is the maximum number of devices that can hold a lease at once, and what happens when the pool is exhausted?</li>
+      <li>Why must a client be able to reach the DHCP server over the network before it can obtain an address? (Consider that it has no IP yet.)</li>
+      <li>Give one reason a network administrator might choose to reserve part of the address range outside the DHCP pool for manual assignment.</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 3 — DNS
+       ====================================================================== -->
+  <section class="lesson" id="l3">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 3</span>
+      <h2>DNS: zones, A and CNAME records, and resolution</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>People remember names such as <code>www.myschool.local</code>, but networks route traffic using IP addresses. The <strong>Domain Name System (DNS)</strong> translates between the two. A DNS server holds <strong>records</strong> that map names to addresses. The two most common record types are:</p>
+    <ul>
+      <li><strong>A record</strong> — maps a name directly to an IPv4 address, for example <code>www.myschool.local → 192.168.1.101</code>.</li>
+      <li><strong>CNAME record</strong> — maps a name to <em>another name</em> (an alias), for example <code>portal.myschool.local → www.myschool.local</code>. Resolving a CNAME means following it to the target name and then resolving that.</li>
+    </ul>
+    <p><strong>Resolution</strong> is the process of starting with a name and ending with an IP address. If a name points to a CNAME, the resolver follows the chain until it reaches an A record.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>Select a server that has an IP address and enable the <strong>DNS</strong> service. A <strong>DNS Zone Records</strong> editor appears.</li>
+      <li>Add an A record mapping a domain to the server's own IP address. Add a CNAME record that points a second name at the first.</li>
+      <li>Select a PC and use the <strong>nslookup</strong> field (or the terminal, covered in Lesson 5) to resolve each name. The feedback log shows the resolution chain step by step.</li>
+    </ul>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Create an A record for <code>www.myschool.local</code> that points to your web server's IP, then resolve it from a PC and record the returned address.</li>
+      <li>Add a CNAME record for <code>portal.myschool.local</code> pointing to <code>www.myschool.local</code>. Resolve <code>portal.myschool.local</code> and record the full chain shown in the log.</li>
+      <li>Resolve a name for which no record exists. Record the exact error and explain what it means.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>Explain the difference between an A record and a CNAME record, and give an example use for each.</li>
+      <li>When you resolved <code>portal.myschool.local</code>, describe the sequence of steps the resolver took to reach a final IP address.</li>
+      <li>Why might using a CNAME be more maintainable than creating several separate A records when one server hosts several named sites?</li>
+      <li>What happens to name resolution across the whole network if the DNS server is switched off or becomes unreachable? What could still work, and how?</li>
+      <li>The resolver limits how many CNAMEs it will follow. Why is such a limit necessary?</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 4 — WEB SERVER
+       ====================================================================== -->
+  <section class="lesson" id="l4">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 4</span>
+      <h2>Web servers: hosting page content</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>A <strong>web server</strong> is software running on a host that responds to requests for web pages. A client sends an <strong>HTTP request</strong> (for example <code>GET /</code>) and the server returns a <strong>response</strong>: a status line such as <code>200 OK</code>, some headers, and the page content (HTML). Web traffic uses <strong>port 80</strong> for plain HTTP and <strong>port 443</strong> for encrypted HTTPS.</p>
+    <p>In this simulator a server can host a single page. You edit the HTML directly, and clients can fetch it with the <code>curl</code> command or view it rendered in the built-in browser.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>Select a server with an IP address and enable the <strong>Web</strong> service. Note the ports listed: 80 and 443.</li>
+      <li>Edit the <strong>Web Page Content</strong> HTML. Keep it simple to begin with, for example a heading and a paragraph.</li>
+      <li>Open a PC's terminal and run <code>curl http://&lt;server-ip&gt;</code>, then switch to the <strong>Browser</strong> tab to see the page rendered.</li>
+    </ul>
+
+    <div class="note tip">
+      <span class="label">Tip</span>
+      For readable URLs, combine this with Lesson 3: add a DNS A record for your server, then request the page by name instead of by IP address.
+    </div>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Host a page with a heading, a paragraph and a list. Fetch it with <code>curl</code> and confirm the returned HTML matches what you entered.</li>
+      <li>Add a DNS record so the page can be reached by name, then load it in the Browser tab using that name.</li>
+      <li>Turn the Web service off and attempt to load the page again. Record the exact message the client receives and relate it to the idea of a port being closed.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>Describe the request/response cycle for a single web page, naming the request method and the meaning of a <code>200 OK</code> status.</li>
+      <li>Which port does plain HTTP use, and which port does HTTPS use? Why does it matter that these are different?</li>
+      <li>When the Web service was disabled, what response did the client get, and what does this tell you about how servers handle requests to closed ports?</li>
+      <li>Why is it useful to reach a website by name rather than by IP address, both for users and for the site operator?</li>
+      <li>The simulator serves one page per server. In reality a web server hosts many resources. What role do the parts of a URL after the host name (the path) play in selecting a resource?</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 5 — TERMINAL
+       ====================================================================== -->
+  <section class="lesson" id="l5">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 5</span>
+      <h2>The terminal: ping, nslookup, curl, ipconfig</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>Network engineers diagnose problems using command-line tools. Each PC in the simulator has a terminal offering the core commands:</p>
+    <ul>
+      <li><code>ipconfig</code> — shows this PC's own IP address, subnet mask, gateway and DNS server.</li>
+      <li><code>ping [ip|domain]</code> — tests whether another host is reachable and reports round-trip times.</li>
+      <li><code>nslookup [domain]</code> — asks the DNS server to resolve a name to an address.</li>
+      <li><code>curl http(s)://domain</code> — fetches a web page and prints the response.</li>
+      <li><code>help</code> — lists the available commands.</li>
+    </ul>
+    <p>Because each command drives the real simulation, its output reflects the network you actually built — including failures when something is misconfigured.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>Select a PC and click <span class="kbd">🖥 Open Terminal / Browser</span>. Run <code>help</code> to see every command.</li>
+      <li>Run <code>ipconfig</code> to confirm the PC's addressing, then <code>ping</code> another device by its IP address.</li>
+      <li>Use <code>nslookup</code> on a domain you created, then <code>curl</code> that same domain and compare what each command tells you.</li>
+    </ul>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Use <code>ipconfig</code> to record your PC's IP, gateway and DNS values. Then <code>ping</code> the gateway and record the reported round-trip time and TTL.</li>
+      <li>Resolve a domain with <code>nslookup</code>, note the IP returned, then <code>ping</code> that IP directly. Confirm the name and the address reach the same host.</li>
+      <li>Run <code>curl</code> against a domain before, and then after, disabling either DNS or the web service. Record how the error message differs between the two failures.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>What information does <code>ipconfig</code> report, and why is it usually the first command to run when a PC cannot reach the network?</li>
+      <li><code>ping</code> can succeed while <code>curl</code> fails for the same host. Give a scenario in which this happens and explain why.</li>
+      <li>What is the difference between what <code>nslookup</code> tests and what <code>curl</code> tests? Which layer of activity does each exercise?</li>
+      <li>You <code>ping</code> a domain name and it fails, but pinging its IP address succeeds. What does this tell you about where the problem lies?</li>
+      <li>Why is it valuable that these commands operate on the network you built, rather than returning fixed sample output?</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 6 — FIREWALL
+       ====================================================================== -->
+  <section class="lesson" id="l6">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 6</span>
+      <h2>Firewalls and filtering traffic</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>A <strong>firewall</strong> controls which traffic is allowed to pass through a point in the network. It applies a list of <strong>rules</strong>, each stating whether to <strong>allow</strong> or <strong>block</strong> traffic that matches a destination IP address and port. Rules are evaluated in order from top to bottom, and the <strong>first matching rule wins</strong>. If no rule matches, a <strong>default action</strong> applies.</p>
+    <p>A secure design usually follows <strong>default-deny</strong>: block everything by default, then add specific allow rules only for the services that are genuinely needed. This is the opposite of default-allow, where everything is permitted unless explicitly blocked.</p>
+    <p>In this simulator the firewall runs on the router. Blocked traffic is shown as a red packet that is dropped when it reaches the router, and the reason is reported in the log and terminal.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>Select the router and open the <strong>Firewall</strong> section. Enable it and note the default action.</li>
+      <li>Add a rule such as <code>BLOCK any : 80</code> to block all plain HTTP traffic, then try to <code>curl</code> an HTTP site from a PC.</li>
+      <li>Change the default action to <strong>BLOCK</strong> and add explicit <strong>ALLOW</strong> rules for the ports you want, observing how traffic is affected.</li>
+    </ul>
+
+    <div class="note warn">
+      <span class="label">Watch the colour</span>
+      When a packet is blocked it turns red and is dropped exactly at the firewall. The terminal names the rule responsible, which helps you debug your rule order.
+    </div>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Block port 80 while leaving port 443 open. Confirm that <code>curl http://…</code> is dropped but <code>curl https://…</code> (with a valid certificate) still works.</li>
+      <li>Switch to a default-deny posture: set the default action to BLOCK, then add a single ALLOW rule for port 443. Verify which requests now succeed.</li>
+      <li>Create two rules that both match the same traffic but have opposite actions. Reorder them and record how the outcome changes, demonstrating that the first match wins.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>Explain the difference between a default-allow and a default-deny firewall, and state which is generally more secure and why.</li>
+      <li>Rules are evaluated top to bottom with the first match winning. Why does the order of rules matter? Give an example where a poorly ordered rule set fails to achieve its intent.</li>
+      <li>You blocked port 80 but a PC can still reach the site over port 443. Explain why blocking one port does not necessarily block a service entirely.</li>
+      <li>A firewall that is enabled but set to default-allow with no block rules provides little protection. Explain why.</li>
+      <li>Give one advantage and one limitation of filtering traffic purely by IP address and port number.</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 7 — TLS CERTIFICATES
+       ====================================================================== -->
+  <section class="lesson" id="l7">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 7</span>
+      <h2>TLS certificates and Let's Encrypt</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p><strong>HTTPS</strong> is HTTP carried over an encrypted <strong>TLS</strong> connection. To offer HTTPS, a server presents a <strong>certificate</strong>: a signed statement that binds a domain name to the server's identity. A certificate is issued by a <strong>Certificate Authority (CA)</strong> that browsers trust. <strong>Let's Encrypt</strong> is a widely used CA that issues certificates automatically and at no cost.</p>
+    <p>A certificate carries a <strong>validity period</strong> with an issue date and an <strong>expiry date</strong>, and it names the <strong>domain</strong> it is valid for. When a client connects over HTTPS it checks three things: that a certificate is present, that it has not expired, and that its domain matches the site being visited. If any check fails, the connection is not trusted.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>Select a web server and find the <strong>SSL / TLS Certificate</strong> module. Enter the domain your site uses (matching your DNS record).</li>
+      <li>Click <span class="kbd">🔒 Generate certificate</span> to issue a valid Let's Encrypt certificate. Read the issuer, issue date and expiry shown in the status box.</li>
+      <li>From a PC, <code>curl https://&lt;your-domain&gt;</code> and observe the TLS handshake line and the padlocked (green) packets.</li>
+    </ul>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Issue a valid certificate for your domain, then load the site over HTTPS in the browser. Confirm the lock indicator shows the connection as secure.</li>
+      <li>Enable <strong>Force HTTPS</strong> on the web server, then attempt to load the site over plain HTTP. Record what happens and why.</li>
+      <li>Issue a certificate for one domain but request the site using a <em>different</em> domain name that also points to the same server. Record the validation result and explain it.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>What three checks does a client perform on a certificate during an HTTPS connection, and what does each one protect against?</li>
+      <li>What is the role of a Certificate Authority, and why must the client already trust the CA for the certificate to be meaningful?</li>
+      <li>Explain what "domain match" means and why a certificate issued for one domain should not be accepted for another.</li>
+      <li>Why do certificates have an expiry date rather than lasting forever? Give a security reason.</li>
+      <li>What does the <strong>Force HTTPS</strong> setting achieve, and why might a site operator enable it?</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 8 — DDoS
+       ====================================================================== -->
+  <section class="lesson" id="l8">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 8</span>
+      <h2>Denial of service (DDoS) and rate limiting</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>A <strong>Denial of Service (DoS)</strong> attack aims to make a service unavailable to its legitimate users. A <strong>Distributed Denial of Service (DDoS)</strong> attack does this from many sources at once, flooding the target with more requests than it can handle. The target's server, or the single network link leading to it, becomes a <strong>bottleneck</strong> that is overwhelmed.</p>
+    <p>Defences include <strong>rate limiting</strong> (capping how many requests a source may send in a period), <strong>filtering</strong> unwanted traffic at the firewall or upstream, using a <strong>content delivery network</strong> or scrubbing service to absorb the load, and provisioning <strong>redundant capacity</strong> so there is no single point of failure.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>Build a network with a web server and several PCs. Open <span class="kbd">🛡 Pen-Test</span> and run the assessment.</li>
+      <li>Find the <strong>DDoS</strong> finding and click <span class="kbd">▶ Demonstrate attack</span> to watch a flood of red packets converge on the server.</li>
+      <li>Enable the firewall on the router and run the assessment again. Compare the severity of the DDoS finding before and after.</li>
+    </ul>
+
+    <div class="note info">
+      <span class="label">Observe</span>
+      The demonstration launches repeated bursts of packets from every available source toward the server, illustrating how a single target and a single uplink become saturated.
+    </div>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Run the DDoS demonstration against your web server and describe what the flood of packets represents in a real attack.</li>
+      <li>Run the pen-test with no firewall enabled and record the DDoS severity rating. Enable the firewall and re-run; record the new rating.</li>
+      <li>Identify the single points of failure in your topology (the server and the links leading to it) and describe one change to the design that would reduce the impact of a flood.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>Distinguish between a DoS and a DDoS attack. Why is the distributed form harder to defend against?</li>
+      <li>What is a bottleneck in the context of this attack, and where are the bottlenecks in your simulated network?</li>
+      <li>The simulator rates DDoS resilience as slightly better when a firewall is present but still not fully protected. Explain why a firewall alone is insufficient against a large volumetric attack.</li>
+      <li>Explain how rate limiting reduces the effect of a flood, and give one drawback of setting the limit too low.</li>
+      <li>Why does adding redundant capacity or an upstream scrubbing service help, when simply making one server larger may not?</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 9 — MITM
+       ====================================================================== -->
+  <section class="lesson" id="l9">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 9</span>
+      <h2>Man-in-the-middle interception</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>A <strong>man-in-the-middle (MITM)</strong> attacker positions themselves on the path between a client and a server, where they can read or alter traffic as it passes. Whether this matters depends on whether the traffic is encrypted. <strong>Plaintext</strong> traffic (such as plain HTTP) can be read directly by anyone on the path, including passwords and page content. <strong>Encrypted</strong> traffic (such as HTTPS) appears as unreadable data, so an interceptor learns little from it.</p>
+    <p>The simulator lets you place an eavesdropper on the network and compare, side by side, what the attacker sees for HTTP versus HTTPS.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>Enable the <span class="kbd">🕵️ MITM</span> toggle in the toolbar. A banner appears on the canvas indicating an eavesdropper is active.</li>
+      <li>From a PC, <code>curl</code> a site over <strong>HTTP</strong>. Observe that the packets are red and the interceptor displays the readable payload.</li>
+      <li>Issue a certificate (Lesson 7), then <code>curl</code> the same site over <strong>HTTPS</strong>. Observe that the packets are green with a padlock and the interceptor sees only <code>••••••••</code>.</li>
+    </ul>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>With MITM active, request a page over HTTP and record exactly what the eavesdropper is shown next to the packets.</li>
+      <li>Repeat the request over HTTPS with a valid certificate and record what the eavesdropper is shown this time.</li>
+      <li>Read the terminal and feedback log after each request. Record the specific message the simulator gives about whether the traffic could be read.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>What is a man-in-the-middle attacker, and what position on the network do they need to occupy?</li>
+      <li>Using your observations, contrast what the interceptor could read for HTTP versus HTTPS traffic.</li>
+      <li>Encryption protects the <em>content</em> of traffic, but an interceptor may still observe some information about a connection. Suggest what an attacker might still learn even when traffic is encrypted.</li>
+      <li>Why is it dangerous to enter a password on a site served over plain HTTP, particularly on a shared or public network?</li>
+      <li>Explain how HTTPS defends against a man-in-the-middle, referring both to encryption and to the certificate check from Lesson 7.</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 10 — UNSECURED PROTOCOLS
+       ====================================================================== -->
+  <section class="lesson" id="l10">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 10</span>
+      <h2>Unsecured protocols (ports 80, 21, 25)</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>Several long-established protocols transmit data, and often credentials, without encryption by default. In this simulator the relevant services and ports are:</p>
+    <ul>
+      <li><strong>HTTP — port 80</strong>: web pages in plaintext.</li>
+      <li><strong>FTP — port 21</strong>: file transfer, historically with credentials sent in the clear.</li>
+      <li><strong>SMTP — port 25</strong>: email transfer between servers, unencrypted in its basic form.</li>
+    </ul>
+    <p>Each of these has a secure replacement or extension (for example HTTPS, FTPS/SFTP, and SMTP with STARTTLS). Leaving the unencrypted versions open increases the <strong>attack surface</strong>: the set of points where an attacker could interact with your system.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>On a server, enable the <strong>File</strong> service (port 21) and the <strong>Mail</strong> service (port 25). Note the ports shown for each.</li>
+      <li>Run the <span class="kbd">🛡 Pen-Test</span> assessment and read the finding about legacy clear-text services.</li>
+      <li>Combine this with Lesson 9: enable MITM and observe that any traffic on these unencrypted protocols is exposed.</li>
+    </ul>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Enable the File and Mail services and record the ports the simulator associates with each.</li>
+      <li>Run the pen-test and record the severity and remediation advice given for the unsecured-protocol finding.</li>
+      <li>Add firewall rules that block ports 21 and 25 from untrusted sources, re-run the pen-test, and note any change in the findings.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>For each of ports 80, 21 and 25, name the protocol and state what kind of data it carries.</li>
+      <li>What does the term "attack surface" mean, and how does leaving unencrypted services open increase it?</li>
+      <li>For one of the three protocols, name its secure alternative and explain what that alternative adds.</li>
+      <li>Blocking a port at the firewall and switching to an encrypted protocol are two different responses. Explain the difference and when you might use each.</li>
+      <li>Why might an organisation still be running these legacy protocols despite the risks, and what makes migrating away from them difficult?</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 11 — APPLICATION ATTACKS
+       ====================================================================== -->
+  <section class="lesson" id="l11">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 11</span>
+      <h2>Application attacks: phishing, SQL injection, XSS</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>Not every attack targets the network layer. Many target the <strong>application</strong> — the website itself and the people who use it.</p>
+    <ul>
+      <li><strong>Phishing</strong> tricks users into trusting a fraudulent site or message. Without HTTPS and a valid certificate, users have no reliable way to confirm they are on the genuine site.</li>
+      <li><strong>SQL injection (SQLi)</strong> occurs when user input is placed directly into a database query. Crafted input can change the query's meaning, exposing or altering data. The defence is to <strong>validate input</strong> and use <strong>parameterised (prepared) queries</strong>.</li>
+      <li><strong>Cross-site scripting (XSS)</strong> occurs when a site displays untrusted input without escaping it, allowing an attacker's script to run in another user's browser. The defence is to <strong>escape or encode output</strong>.</li>
+    </ul>
+    <p>The simulator inspects your hosted HTML for signs of these weaknesses: script or event-handler markup suggests an XSS risk, and input forms suggest a surface where SQL injection must be considered.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>Edit a web server's page to include a form (<code>&lt;form&gt;</code> and <code>&lt;input&gt;</code> elements) and, separately, some script or an inline event handler.</li>
+      <li>Run the <span class="kbd">🛡 Pen-Test</span> assessment and read the injection findings it raises.</li>
+      <li>Remove the site's certificate (or leave it without one) and note the phishing-related finding about users being unable to verify authenticity.</li>
+    </ul>
+
+    <div class="note warn">
+      <span class="label">Note</span>
+      The simulator's browser strips scripts before rendering, so no real code executes. The pen-test flags the <em>pattern</em> in your content to teach you where the risk would be.
+    </div>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Add a login-style form to your page, run the pen-test, and record the SQL-injection-related finding and its recommended remediation.</li>
+      <li>Add script or event-handler markup to your page, run the pen-test, and record the XSS finding and its severity.</li>
+      <li>Leave the site without a certificate, run the pen-test, and record the phishing finding. Then issue a certificate and confirm the finding is resolved.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>Explain how phishing exploits a user's inability to verify a site's identity, and how HTTPS with a valid certificate helps.</li>
+      <li>Describe how SQL injection works at a high level, and explain why parameterised queries prevent it.</li>
+      <li>Describe how cross-site scripting works, and explain what "escaping output" means and why it defends against XSS.</li>
+      <li>SQL injection and XSS both stem from mixing untrusted input with something else (a query, or a page). Explain the common underlying cause and the general principle that prevents both.</li>
+      <li>Why are application-layer attacks not stopped by a network firewall that filters on IP address and port alone?</li>
+    </ol>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 12 — EXPIRED / MISSING CERTIFICATES
+       ====================================================================== -->
+  <section class="lesson" id="l12">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 12</span>
+      <h2>Expired and missing certificates</h2>
+    </div>
+
+    <h3>Introduction</h3>
+    <p>A certificate only provides protection while it is valid and correctly matched to the site. Three common failures break this:</p>
+    <ul>
+      <li><strong>Missing certificate</strong>: the server offers no certificate, so a secure connection cannot be established at all.</li>
+      <li><strong>Expired certificate</strong>: the certificate's expiry date has passed. Clients no longer trust it, even though it was once valid.</li>
+      <li><strong>Self-signed certificate</strong>: the certificate is signed by the server itself rather than a trusted CA, so clients cannot verify its authenticity and show a warning.</li>
+    </ul>
+    <p>Each failure produces a browser warning or a refused connection. Training users to "click through" such warnings is itself a security risk, because it teaches them to ignore genuine danger signs.</p>
+
+    <h3>Exploring in the simulator</h3>
+    <ul>
+      <li>On a web server, use the SSL module's options to issue an <strong>Expired (demo)</strong> certificate and a <strong>Self-signed</strong> certificate, and also try the case with <strong>no</strong> certificate.</li>
+      <li>For each case, <code>curl https://&lt;your-domain&gt;</code> from a PC and read the validation message. Also load the site in the Browser tab and observe the warning page and lock indicator.</li>
+      <li>Run the <span class="kbd">🛡 Pen-Test</span> assessment and find the certificate-related findings.</li>
+    </ul>
+
+    <h3>Tasks</h3>
+    <ol class="tasks">
+      <li>Test all three failure cases (missing, expired, self-signed). For each, record the exact validation message the simulator reports.</li>
+      <li>Load one failing case in the Browser tab and describe how the warning page and lock indicator differ from a valid HTTPS connection.</li>
+      <li>Re-issue a valid certificate for the correct domain and confirm that both <code>curl</code> and the browser now treat the connection as secure.</li>
+    </ol>
+
+    <h3>Questions</h3>
+    <ol class="questions">
+      <li>Distinguish between a missing, an expired and a self-signed certificate, and describe the client's response to each.</li>
+      <li>Why does a certificate that was valid yesterday stop being trusted once its expiry date passes?</li>
+      <li>A self-signed certificate still encrypts the connection. Explain why clients nonetheless warn about it, referring to the role of the Certificate Authority.</li>
+      <li>Why is it a security problem when users become accustomed to clicking past certificate warnings?</li>
+      <li>Automated issuance and renewal (as offered by Let's Encrypt) directly address one of these failures. Which one, and how?</li>
+    </ol>
+  </section>
+
+</div>
+</body>
+</html>

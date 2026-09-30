@@ -1,0 +1,3652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Network Simulator — IB Computer Science</title>
+
+<!--
+  ============================================================================
+  NETWORK SIMULATOR  —  IB Computer Science teaching tool
+  ============================================================================
+  A single-file, client-side, dependency-free interactive network simulator.
+  Just open this file in any modern browser — no server or build step needed.
+
+  WHAT STUDENTS CAN DO
+    - Build a topology: PCs, Switches, Routers/Gateways, Servers, WAN cloud.
+    - Watch colour-coded packets animate along links as requests travel.
+    - Use DHCP to hand out IP addresses from a router's pool.
+    - Run DNS, Web, Mail and File services on servers (with real ports).
+    - Create DNS A / CNAME records and host a simulated web page.
+    - Use a per-PC Terminal (ping, nslookup, curl, ipconfig) and a Browser.
+    - Configure a firewall (allow/block by IP + port) on the router.
+    - Issue simulated "Let's Encrypt" TLS certificates and force HTTPS.
+    - Toggle a Man-in-the-Middle eavesdropper to SEE plaintext vs encrypted.
+    - Run an automated Pen-Test that grades the design and explains risks.
+    - Save / Load (browser) and Export / Import (.json) their networks.
+
+  ----------------------------------------------------------------------------
+  FOR EDUCATORS  —  where to customise things
+  ----------------------------------------------------------------------------
+  The entire simulation state lives in the single global `SIM` object; inspect
+  it live from the browser console. Editable defaults are grouped near the top
+  of the <script> under section 1 (CONFIG / CONSTANTS):
+
+    DEVICE_TYPES  — device kinds, icons, colours, sizes.
+    NETWORK       — LAN prefix, subnet mask, gateway host, DHCP pool, WAN prefix.
+    SERVICE_DEFS  — the services servers can host and their port numbers.
+    SECURITY      — simulated certificate lifetime + CA (issuer) name.
+    PACKET        — animation speed, size, and per-kind colours.
+
+  Two more places worth knowing:
+    CHECKS[]             (section 9c) — the pen-test rules. Add/remove/reword
+                          freely; each returns a finding object or null.
+    loadSampleScenario() (section 9d) — the ready-made "✨ Example" network.
+                          Edit it to seed a lesson or an assessment task.
+
+  Colour language used throughout:
+    green = secure / success,  red = dropped / blocked / insecure,
+    amber = warning / misconfiguration,  cyan = informational.
+  ============================================================================
+-->
+
+<style>
+  /* ==========================================================================
+     DESIGN SYSTEM  —  edit these variables to re-theme the whole app
+     ========================================================================== */
+  :root {
+    /* Palette --------------------------------------------------------------- */
+    --bg:            #ffffff;   /* app background */
+    --surface:       #ffffff;   /* panels / cards */
+    --surface-alt:   #f7f8fa;   /* subtle alternate surface */
+    --border:        #e4e7ec;   /* hairline borders */
+    --border-strong: #d0d5dd;   /* stronger borders */
+    --text:          #1a1d23;   /* primary text */
+    --text-muted:    #667085;   /* secondary text */
+    --text-faint:    #98a2b3;   /* tertiary text */
+
+    --accent:        #2563eb;   /* primary action / selection */
+    --accent-soft:   #eff4ff;   /* accent tint background */
+
+    /* Semantic colours used by packet animations & feedback ----------------- */
+    --secure:        #16a34a;   /* green  = secure / success */
+    --secure-soft:   #eafaf0;
+    --danger:        #dc2626;   /* red    = dropped / insecure / blocked */
+    --danger-soft:   #fdecec;
+    --warning:       #d97706;   /* amber  = warning / misconfiguration */
+    --warning-soft:  #fef6e7;
+    --info:          #0891b2;   /* cyan   = informational */
+
+    /* Device accent colours (used for node icons) --------------------------- */
+    --dev-pc:        #2563eb;
+    --dev-switch:    #7c3aed;
+    --dev-router:    #0891b2;
+    --dev-server:    #059669;
+    --dev-wan:       #64748b;
+
+    /* Shape & depth --------------------------------------------------------- */
+    --radius:        10px;
+    --radius-sm:     7px;
+    --shadow-sm:     0 1px 2px rgba(16,24,40,0.05);
+    --shadow-md:     0 4px 12px rgba(16,24,40,0.08);
+    --shadow-lg:     0 12px 32px rgba(16,24,40,0.12);
+
+    /* Typography ------------------------------------------------------------ */
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+            Arial, "Inter", sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  }
+
+  /* ==========================================================================
+     GLOBAL RESETS
+     ========================================================================== */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; }
+
+  /* ==========================================================================
+     APP SHELL  —  header / main / footer grid
+     ========================================================================== */
+  #app {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ---- Header --------------------------------------------------------------*/
+  header.app-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    z-index: 10;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 15px; letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+  .brand .logo {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: linear-gradient(135deg, var(--accent), #7c3aed);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px;
+  }
+  .brand .sub {
+    color: var(--text-faint); font-weight: 500; font-size: 12px;
+    padding-left: 10px; margin-left: 4px; border-left: 1px solid var(--border);
+  }
+
+  /* ---- Toolbar (device palette + actions) --------------------------------- */
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+  .toolbar .group {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface-alt);
+  }
+  .toolbar .group-label {
+    font-size: 11px; color: var(--text-faint); text-transform: uppercase;
+    letter-spacing: 0.04em; margin: 0 4px 0 6px; font-weight: 600;
+  }
+
+  /* Generic button styles ---------------------------------------------------- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 11px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--surface);
+    color: var(--text); font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: background .12s ease, border-color .12s ease, box-shadow .12s ease, transform .05s ease;
+    white-space: nowrap;
+  }
+  .btn:hover  { background: var(--surface-alt); border-color: var(--border-strong); }
+  .btn:active { transform: translateY(1px); }
+  .btn .ico   { font-size: 15px; line-height: 1; }
+
+  .btn.tool   { border-color: var(--border); background: var(--surface); }
+  .btn.tool:hover { box-shadow: var(--shadow-sm); }
+  .btn.tool.active {
+    background: var(--accent-soft); border-color: var(--accent); color: var(--accent);
+  }
+
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #1d4ed8; }
+
+  .btn.danger  { color: var(--danger); border-color: #f4c7c7; background: var(--danger-soft); }
+  .btn.danger:hover { background: #fbdcdc; }
+
+  .btn.ghost   { border-color: transparent; background: transparent; color: var(--text-muted); }
+  .btn.ghost:hover { background: var(--surface-alt); }
+
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ==========================================================================
+     MAIN WORKSPACE  —  canvas (left)  +  config panel (right)
+     ========================================================================== */
+  main.workspace {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    min-height: 0; /* allow children to scroll within grid */
+  }
+
+  /* ---- Topology canvas area ------------------------------------------------ */
+  .canvas-wrap {
+    position: relative;
+    background:
+      radial-gradient(circle at 1px 1px, #eef0f3 1px, transparent 0); /* dot grid drawn by canvas too; this is a fallback */
+    background-color: #fcfcfd;
+    overflow: hidden;
+    min-width: 0;
+  }
+  #topology { display: block; width: 100%; height: 100%; cursor: default; }
+  #topology.mode-connect { cursor: crosshair; }
+  #topology.grabbing { cursor: grabbing; }
+
+  /* Floating hint shown when canvas is empty */
+  .canvas-hint {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    text-align: center; color: var(--text-faint); pointer-events: none;
+    user-select: none; max-width: 380px;
+  }
+  .canvas-hint .big { font-size: 15px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+  .canvas-hint .small { font-size: 13px; }
+
+  /* Small status chip in the corner of the canvas */
+  .canvas-status {
+    position: absolute; left: 14px; top: 14px;
+    display: flex; gap: 8px; align-items: center; pointer-events: none;
+  }
+  .chip {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px; padding: 4px 10px; font-size: 12px; color: var(--text-muted);
+    box-shadow: var(--shadow-sm); display: inline-flex; align-items: center; gap: 6px;
+  }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
+  .chip.mode-on .dot { background: var(--accent); }
+  .chip.mode-on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+  /* ---- Configuration panel (right) ---------------------------------------- */
+  aside.config-panel {
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  .panel-header {
+    padding: 14px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .panel-header .title { font-weight: 700; font-size: 14px; }
+  .panel-header .badge {
+    margin-left: auto; font-size: 11px; font-weight: 600; padding: 3px 8px;
+    border-radius: 999px; background: var(--surface-alt); color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .panel-body { padding: 16px; overflow-y: auto; flex: 1; min-height: 0; }
+
+  /* Empty state inside config panel */
+  .panel-empty { color: var(--text-faint); text-align: center; padding: 40px 12px; }
+  .panel-empty .icon { font-size: 30px; opacity: .5; margin-bottom: 10px; }
+
+  /* Form field styles used by config panel */
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block; font-size: 12px; font-weight: 600; color: var(--text-muted);
+    margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .field input[type="text"], .field select, .field textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); font-size: 13px; font-family: inherit; color: var(--text);
+    background: var(--surface);
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  /* Read-only property rows */
+  .prop-row {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 8px 0; border-bottom: 1px dashed var(--border);
+    font-size: 13px;
+  }
+  .prop-row:last-child { border-bottom: none; }
+  .prop-row .k { color: var(--text-muted); }
+  .prop-row .v { font-family: var(--mono); color: var(--text); font-size: 12px; text-align: right; }
+  .prop-row .v.muted { color: var(--text-faint); }
+
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-faint); margin: 20px 0 8px;
+  }
+  .section-title:first-child { margin-top: 0; }
+
+  /* Small device swatch shown in the panel header */
+  .dev-swatch {
+    width: 24px; height: 24px; border-radius: 6px; display: inline-flex;
+    align-items: center; justify-content: center; color: #fff; font-size: 13px;
+  }
+
+  /* ==========================================================================
+     FOOTER  —  feedback / scenario log
+     ========================================================================== */
+  footer.feedback {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    height: 132px;
+    display: flex; flex-direction: column;
+  }
+  .feedback-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 16px; border-bottom: 1px solid var(--border);
+  }
+  .feedback-head .title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+  .feedback-head .spacer { flex: 1; }
+  .log {
+    flex: 1; overflow-y: auto; padding: 8px 16px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.7;
+  }
+  .log .line { display: flex; gap: 10px; }
+  .log .line .time { color: var(--text-faint); flex: 0 0 auto; }
+  .log .line .msg  { color: var(--text); }
+  .log .line.info    .msg { color: var(--info); }
+  .log .line.secure  .msg { color: var(--secure); }
+  .log .line.danger  .msg { color: var(--danger); }
+  .log .line.warning .msg { color: var(--warning); }
+
+  /* Service toggles (Phase 3) */
+  .svc-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    margin-bottom: 8px; background: var(--surface);
+  }
+  .svc-row .svc-emoji { font-size: 17px; }
+  .svc-row .svc-meta { flex: 1; min-width: 0; }
+  .svc-row .svc-name { font-weight: 600; font-size: 13px; }
+  .svc-row .svc-ports { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+  .svc-row.on { border-color: var(--secure); background: var(--secure-soft); }
+
+  /* Toggle switch */
+  .switch { position: relative; width: 38px; height: 22px; flex: 0 0 auto; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .slider {
+    position: absolute; inset: 0; border-radius: 999px; background: var(--border-strong);
+    transition: background .15s ease; cursor: pointer;
+  }
+  .switch .slider::before {
+    content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: transform .15s ease; box-shadow: var(--shadow-sm);
+  }
+  .switch input:checked + .slider { background: var(--secure); }
+  .switch input:checked + .slider::before { transform: translateX(16px); }
+
+  /* DNS records table */
+  .dns-rec {
+    display: grid; grid-template-columns: 58px 1fr 1fr 26px; gap: 6px; align-items: center;
+    margin-bottom: 6px;
+  }
+  .dns-rec select, .dns-rec input {
+    padding: 6px 7px; font-size: 12px; border: 1px solid var(--border-strong);
+    border-radius: 6px; font-family: var(--mono); width: 100%;
+  }
+  .dns-rec .del {
+    border: none; background: transparent; color: var(--danger); cursor: pointer; font-size: 15px;
+    padding: 2px;
+  }
+  .dns-rec .del:hover { color: #b91c1c; }
+  .mini-note { font-size: 11px; color: var(--text-faint); margin: 4px 0 10px; }
+
+  /* Firewall rule editor (Phase 5) */
+  .fw-rule {
+    display: grid; grid-template-columns: 74px 1fr 72px 26px; gap: 6px; align-items: center;
+    margin-bottom: 6px;
+  }
+  .fw-rule select, .fw-rule input {
+    padding: 6px 7px; font-size: 12px; border: 1px solid var(--border-strong);
+    border-radius: 6px; font-family: var(--mono); width: 100%;
+  }
+  .fw-rule .del { border: none; background: transparent; color: var(--danger); cursor: pointer; font-size: 15px; }
+  .fw-rule .del:hover { color: #b91c1c; }
+
+  /* SSL certificate status box (Phase 5) */
+  .cert-box {
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 10px 12px; font-size: 12px; background: var(--surface-alt);
+  }
+  .cert-box .cert-meta { color: var(--text-muted); font-family: var(--mono); font-size: 11px; margin-top: 2px; }
+  .cert-box.good { border-color: var(--secure); background: var(--secure-soft); }
+  .cert-box.warn { border-color: var(--warning); background: var(--warning-soft); }
+  .cert-box.bad  { border-color: var(--danger);  background: var(--danger-soft); }
+  .cert-box.none { color: var(--text-muted); }
+
+  /* MITM toolbar button active state */
+  .btn.tool#tool-mitm.active {
+    background: var(--danger-soft); border-color: var(--danger); color: var(--danger);
+  }
+
+  /* ==========================================================================
+     PEN-TEST MODAL  (Phase 6)
+     ========================================================================== */
+  .pentest-modal { width: min(760px, 96vw); height: min(640px, 92vh); }
+  .pentest-modal .modal-body { overflow-y: auto; padding: 0; }
+
+  .pentest-summary { padding: 18px 20px; border-bottom: 1px solid var(--border); }
+  .pt-empty { text-align: center; color: var(--text-faint); padding: 40px 20px; }
+  .pt-empty-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
+
+  /* Score banner */
+  .pt-score { display: flex; align-items: center; gap: 18px; }
+  .pt-grade {
+    width: 74px; height: 74px; border-radius: 16px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 34px; font-weight: 800; color: #fff;
+  }
+  .pt-grade.good { background: var(--secure); }
+  .pt-grade.warn { background: var(--warning); }
+  .pt-grade.bad  { background: var(--danger); }
+  .pt-score-meta { flex: 1; }
+  .pt-score-title { font-size: 16px; font-weight: 700; margin-bottom: 3px; }
+  .pt-score-sub { color: var(--text-muted); font-size: 13px; }
+  .pt-counts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .pt-count {
+    font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+  .pt-count.crit { color: var(--danger);  background: var(--danger-soft);  border-color: #f4c7c7; }
+  .pt-count.high { color: #b45309;        background: var(--warning-soft); border-color: #f5d9a8; }
+  .pt-count.med  { color: var(--warning); background: var(--warning-soft); border-color: #f5d9a8; }
+  .pt-count.pass { color: var(--secure);  background: var(--secure-soft);  border-color: #bfe6cd; }
+
+  /* Finding rows */
+  .pentest-results { padding: 8px 14px 18px; }
+  .pt-finding {
+    border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius-sm);
+    padding: 12px 14px; margin: 10px 0; background: var(--surface);
+  }
+  .pt-finding.critical { border-left-color: var(--danger); }
+  .pt-finding.high     { border-left-color: #ea580c; }
+  .pt-finding.medium   { border-left-color: var(--warning); }
+  .pt-finding.low      { border-left-color: var(--info); }
+  .pt-finding.pass     { border-left-color: var(--secure); background: var(--secure-soft); }
+  .pt-finding-head { display: flex; align-items: center; gap: 10px; }
+  .pt-sev {
+    font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 5px; color: #fff; flex: 0 0 auto;
+  }
+  .pt-sev.critical { background: var(--danger); }
+  .pt-sev.high     { background: #ea580c; }
+  .pt-sev.medium   { background: var(--warning); }
+  .pt-sev.low      { background: var(--info); }
+  .pt-sev.pass     { background: var(--secure); }
+  .pt-finding-title { font-weight: 700; font-size: 13px; }
+  .pt-finding-cat { margin-left: auto; font-size: 11px; color: var(--text-faint); font-family: var(--mono); }
+  .pt-finding-body { margin-top: 8px; font-size: 13px; color: var(--text); line-height: 1.55; }
+  .pt-finding-fix {
+    margin-top: 8px; font-size: 12px; color: var(--secure); background: var(--secure-soft);
+    border-radius: 6px; padding: 7px 10px;
+  }
+  .pt-finding-fix b { color: #0f7a37; }
+  .pt-finding-demo {
+    margin-top: 8px; font-size: 12px;
+  }
+  .pt-demo-btn { font-size: 12px; padding: 5px 10px; }
+
+  /* ==========================================================================
+     TERMINAL / BROWSER MODAL  (Phase 4)
+     ========================================================================== */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(16,24,40,0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+    padding: 24px;
+  }
+  .modal {
+    width: min(860px, 96vw); height: min(560px, 90vh);
+    background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow-lg); display: flex; flex-direction: column;
+    overflow: hidden; border: 1px solid var(--border);
+  }
+  .modal-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-alt);
+  }
+  .modal-head .title { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .modal-head .spacer { flex: 1; }
+  .modal-tabs { display: flex; gap: 4px; }
+  .modal-tab {
+    padding: 5px 12px; border-radius: 7px; font-size: 12px; font-weight: 600;
+    border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer;
+  }
+  .modal-tab.active { background: var(--surface); border-color: var(--border); color: var(--text); box-shadow: var(--shadow-sm); }
+  .modal-close {
+    border: none; background: transparent; font-size: 20px; line-height: 1; color: var(--text-faint);
+    cursor: pointer; padding: 2px 6px; border-radius: 6px;
+  }
+  .modal-close:hover { background: var(--danger-soft); color: var(--danger); }
+  .modal-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  /* Terminal view */
+  .terminal {
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+    background: #0f1117; color: #d7dce5; font-family: var(--mono); font-size: 13px;
+  }
+  .terminal-out { flex: 1; overflow-y: auto; padding: 12px 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .terminal-out .t-cmd   { color: #7dd3fc; }
+  .terminal-out .t-ok    { color: #86efac; }
+  .terminal-out .t-err   { color: #fca5a5; }
+  .terminal-out .t-warn  { color: #fcd34d; }
+  .terminal-out .t-muted { color: #7a8394; }
+  .terminal-in { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid #222634; }
+  .terminal-in .prompt { color: #86efac; flex: 0 0 auto; }
+  .terminal-in input {
+    flex: 1; background: transparent; border: none; outline: none; color: #eef2f8;
+    font-family: var(--mono); font-size: 13px;
+  }
+
+  /* Browser view */
+  .browser { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #fff; }
+  .browser-bar {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border);
+    background: var(--surface-alt);
+  }
+  .browser-bar .lock { font-size: 14px; }
+  .browser-url {
+    flex: 1; padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 999px;
+    font-family: var(--mono); font-size: 12px; background: #fff; color: var(--text);
+  }
+  .browser-go { padding: 7px 14px; }
+  .browser-view { flex: 1; overflow: auto; padding: 22px 26px; }
+  .browser-view .rendered { max-width: 640px; }
+  .browser-status {
+    padding: 8px 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted);
+    font-family: var(--mono); background: var(--surface-alt);
+  }
+  .browser-error { color: var(--danger); text-align: center; padding: 40px 20px; }
+  .browser-error .big { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+
+  /* Utility */
+  .hidden { display: none !important; }
+  .kbd {
+    font-family: var(--mono); font-size: 11px; background: var(--surface-alt);
+    border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px;
+    padding: 1px 5px; color: var(--text-muted);
+  }
+
+  /* ==========================================================================
+     RESPONSIVE  (Phase 7)  —  keep the tool usable on smaller screens.
+     ========================================================================== */
+  @media (max-width: 1100px) {
+    .toolbar .group-label { display: none; }        /* reclaim space in the toolbar */
+    main.workspace { grid-template-columns: 1fr 300px; }
+  }
+  @media (max-width: 860px) {
+    header.app-header { flex-wrap: wrap; }
+    main.workspace { grid-template-columns: 1fr 260px; }
+    .brand .sub { display: none; }
+  }
+  /* Let the whole toolbar scroll horizontally rather than wrap awkwardly. */
+  .toolbar { overflow-x: auto; }
+</style>
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ======================================================================
+       HEADER  —  brand + device palette toolbar + global actions
+       ====================================================================== -->
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">◈</span>
+      <span>Network Simulator</span>
+      <span class="sub">IB Computer Science</span>
+    </div>
+
+    <div class="toolbar">
+      <!-- Device palette: each button adds a node of the given type ---------- -->
+      <div class="group" id="palette">
+        <span class="group-label">Add</span>
+        <button class="btn tool" data-add="pc"     title="Add a client PC">💻 PC</button>
+        <button class="btn tool" data-add="switch" title="Add a switch">🔀 Switch</button>
+        <button class="btn tool" data-add="router" title="Add a router / gateway">📡 Router</button>
+        <button class="btn tool" data-add="server" title="Add a server">🖧 Server</button>
+        <button class="btn tool" data-add="wan"    title="Add the WAN / Internet cloud">☁️ WAN</button>
+      </div>
+
+      <!-- Editing tools ----------------------------------------------------- -->
+      <div class="group">
+        <span class="group-label">Tools</span>
+        <button class="btn tool" id="tool-connect" title="Connect two nodes (click one, then another)">🔗 Connect</button>
+        <button class="btn tool" id="tool-delete"  title="Delete the selected node or link">🗑 Delete</button>
+      </div>
+
+      <!-- Security tools ---------------------------------------------------- -->
+      <div class="group">
+        <span class="group-label">Security</span>
+        <button class="btn tool" id="tool-mitm" title="Toggle a man-in-the-middle eavesdropper on the LAN">🕵️ MITM</button>
+        <button class="btn tool" id="tool-pentest" title="Run automated penetration tests against your design">🛡 Pen-Test</button>
+      </div>
+
+      <!-- Project actions: save/load/export/import -------------------------- -->
+      <div class="group">
+        <span class="group-label">Project</span>
+        <button class="btn tool" id="action-sample" title="Load a ready-made example network">✨ Example</button>
+        <button class="btn tool" id="action-save"   title="Save this network in your browser">💾 Save</button>
+        <button class="btn tool" id="action-load"   title="Load the network saved in your browser">📂 Load</button>
+        <button class="btn tool" id="action-export" title="Download this network as a .json file">⬇ Export</button>
+        <button class="btn tool" id="action-import" title="Open a .json network file">⬆ Import</button>
+        <!-- Hidden file input used by Import -->
+        <input type="file" id="importFile" accept="application/json,.json" class="hidden" />
+      </div>
+
+      <!-- Global actions ---------------------------------------------------- -->
+      <div class="group">
+        <button class="btn ghost" id="action-clear" title="Remove everything and start over">Clear</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======================================================================
+       MAIN  —  topology canvas (left) + configuration panel (right)
+       ====================================================================== -->
+  <main class="workspace">
+
+    <!-- Topology canvas ------------------------------------------------------ -->
+    <section class="canvas-wrap" id="canvasWrap">
+      <canvas id="topology"></canvas>
+
+      <!-- Corner status chips (mode indicator, counts) -->
+      <div class="canvas-status">
+        <span class="chip" id="chipMode"><span class="dot"></span> Select mode</span>
+        <span class="chip" id="chipCount"><span class="dot"></span> 0 nodes · 0 links</span>
+      </div>
+
+      <!-- Empty-state hint (hidden once nodes exist) -->
+      <div class="canvas-hint" id="canvasHint">
+        <div class="big">Build your network</div>
+        <div class="small">
+          Use the <b>Add</b> buttons above to drop devices onto the canvas.<br />
+          Drag to reposition. Click a device to configure it.<br />
+          Use <b>🔗 Connect</b> to link two devices together.<br /><br />
+          New here? Click <b>✨ Example</b> to load a ready-made network.
+        </div>
+      </div>
+    </section>
+
+    <!-- Configuration panel -------------------------------------------------- -->
+    <aside class="config-panel">
+      <div class="panel-header">
+        <span class="title" id="panelTitle">Configuration</span>
+        <span class="badge" id="panelBadge">No selection</span>
+      </div>
+      <div class="panel-body" id="panelBody">
+        <!-- Populated dynamically by renderConfigPanel() -->
+        <div class="panel-empty">
+          <div class="icon">⚙️</div>
+          <div>Select a device on the canvas to configure it.</div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ======================================================================
+       FOOTER  —  feedback / scenario log
+       ====================================================================== -->
+  <footer class="feedback">
+    <div class="feedback-head">
+      <span class="title">Feedback &amp; Scenario Log</span>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="action-clearlog" title="Clear the log">Clear log</button>
+    </div>
+    <div class="log" id="log"><!-- log lines injected by logMsg() --></div>
+  </footer>
+
+  <!-- ======================================================================
+       TERMINAL / BROWSER MODAL  (Phase 4)  —  opened from a PC's config panel
+       ====================================================================== -->
+  <div class="modal-backdrop hidden" id="terminalModal">
+    <div class="modal">
+      <div class="modal-head">
+        <span class="title" id="termTitle">💻 PC — Terminal</span>
+        <span class="spacer"></span>
+        <div class="modal-tabs">
+          <button class="modal-tab active" data-tab="terminal">Terminal</button>
+          <button class="modal-tab" data-tab="browser">Browser</button>
+        </div>
+        <button class="modal-close" id="termClose" title="Close">×</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Terminal tab -->
+        <div class="terminal" id="termView">
+          <div class="terminal-out" id="termOut"></div>
+          <div class="terminal-in">
+            <span class="prompt" id="termPrompt">$</span>
+            <input type="text" id="termInput" autocomplete="off" spellcheck="false"
+                   placeholder="type a command — try 'help'" />
+          </div>
+        </div>
+
+        <!-- Browser tab -->
+        <div class="browser hidden" id="browserView">
+          <div class="browser-bar">
+            <span class="lock" id="browserLock">🌐</span>
+            <input type="text" class="browser-url" id="browserUrl" placeholder="http://www.myschool.local" />
+            <button class="btn primary browser-go" id="browserGo">Go</button>
+          </div>
+          <div class="browser-view" id="browserContent">
+            <div class="browser-error">
+              <div class="big">No page loaded</div>
+              <div>Enter a URL above (or use <span class="kbd">curl</span> in the Terminal).</div>
+            </div>
+          </div>
+          <div class="browser-status" id="browserStatus">Ready.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       PEN-TEST MODAL  (Phase 6)  —  automated security assessment
+       ====================================================================== -->
+  <div class="modal-backdrop hidden" id="pentestModal">
+    <div class="modal pentest-modal">
+      <div class="modal-head">
+        <span class="title">🛡 Penetration Test — Security Assessment</span>
+        <span class="spacer"></span>
+        <button class="btn primary" id="pentestRun">▶ Run assessment</button>
+        <button class="modal-close" id="pentestClose" title="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="pentest-summary" id="pentestSummary">
+          <div class="pt-empty">
+            <div class="pt-empty-icon">🛡</div>
+            <div>Click <b>Run assessment</b> to test your network design against common attack vectors.</div>
+          </div>
+        </div>
+        <div class="pentest-results" id="pentestResults"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+/* ============================================================================
+   NETWORK SIMULATOR  —  application logic
+   ============================================================================
+   Organised into clearly-labelled sections:
+     1. CONFIG / CONSTANTS  (educator-editable defaults)
+     2. STATE  (the global SIM object)
+     3. UTILITIES
+     4. LOGGING / FEEDBACK
+     5. NODE + LINK MODEL (create / delete / query)
+     6. CANVAS SETUP + RENDERING (grid, nodes, links)
+     7. INTERACTION (mouse: select, drag, connect)
+     8. TOOLBAR + MODE HANDLING
+     9. CONFIGURATION PANEL RENDERING
+    10. INIT / BOOTSTRAP
+   ========================================================================== */
+
+
+/* ============================================================================
+   1. CONFIG / CONSTANTS  —  educators can safely tweak these
+   ========================================================================== */
+
+/**
+ * DEVICE_TYPES defines every kind of node the simulator understands.
+ * Each entry drives the toolbar, rendering, and (in later phases) behaviour.
+ *   label   : human-readable name
+ *   emoji   : quick glyph used inside the node badge
+ *   color   : CSS colour for the node's accent
+ *   radius  : draw radius on the canvas
+ *   canHost : whether the device can run services (used from Phase 3)
+ */
+const DEVICE_TYPES = {
+  pc:     { label: "PC",             emoji: "💻", color: getCSS('--dev-pc'),     radius: 30, canHost: false },
+  switch: { label: "Switch",         emoji: "🔀", color: getCSS('--dev-switch'), radius: 28, canHost: false },
+  router: { label: "Router/Gateway", emoji: "📡", color: getCSS('--dev-router'), radius: 32, canHost: false },
+  server: { label: "Server",         emoji: "🖧", color: getCSS('--dev-server'), radius: 32, canHost: true  },
+  wan:    { label: "WAN/Internet",   emoji: "☁️", color: getCSS('--dev-wan'),    radius: 36, canHost: false },
+};
+
+/** Per-type running counters so new devices get friendly names (PC-1, PC-2 …). */
+const NAME_COUNTERS = { pc: 0, switch: 0, router: 0, server: 0, wan: 0 };
+
+/** Visual tuning constants for the canvas. */
+const CANVAS = {
+  gridSize: 26,          // spacing of the dot grid (px)
+  gridDot: '#e6e9ee',    // dot colour
+  linkColor: '#c4cad3',  // default link colour
+  linkColorSel: getCSS('--accent'),
+  linkWidth: 2.5,
+  labelColor: getCSS('--text'),
+  labelMuted: getCSS('--text-muted'),
+  selectRing: getCSS('--accent'),
+  hoverRing: '#b9c2d0',
+};
+
+/* ----------------------------------------------------------------------------
+   NETWORK defaults (Phase 2)  —  educators can tweak the addressing scheme.
+   The simulator uses a simple /24 style LAN behind each router. Only the last
+   octet varies; the first three octets come from `lanPrefix`.
+   ---------------------------------------------------------------------------- */
+const NETWORK = {
+  lanPrefix:  '192.168.1.',  // LAN network prefix (first three octets)
+  mask:       '255.255.255.0',
+  gatewayHost: 1,            // the router/gateway takes .1 on the LAN
+  dhcpStart:  100,           // DHCP pool first host number (.100)
+  dhcpEnd:    199,           // DHCP pool last host number  (.199)
+  dnsHost:    null,          // discovered DNS server IP (set in later phases)
+  wanPrefix:  '203.0.113.',  // simulated public/WAN prefix for the router's WAN side
+};
+
+/* ----------------------------------------------------------------------------
+   SERVICES (Phase 3)  —  the services a Server can host, and their ports.
+   Educators can add/rename services or change ports here. `secure` marks a
+   service that carries an encrypted variant (used by SSL/MITM viz in Phase 5).
+   ---------------------------------------------------------------------------- */
+const SERVICE_DEFS = {
+  web:  { label: 'Web Server',  ports: [80, 443], emoji: '🌐', proto: 'HTTP/HTTPS' },
+  dns:  { label: 'DNS Server',  ports: [53],       emoji: '🧭', proto: 'DNS' },
+  mail: { label: 'Mail Server', ports: [25],       emoji: '✉️', proto: 'SMTP' },
+  file: { label: 'File Server', ports: [21],       emoji: '📁', proto: 'FTP' },
+};
+
+/* Packet animation tuning (Phase 2). */
+const PACKET = {
+  speed:      2.6,           // pixels per frame baseline along a link
+  radius:     9,             // packet dot radius
+  colors: {                  // colour-coded by purpose/outcome
+    request:   getCSS('--accent'),
+    reply:     getCSS('--secure'),
+    dropped:   getCSS('--danger'),
+    dhcp:      getCSS('--info'),
+    info:      getCSS('--text-muted'),
+    plaintext: getCSS('--danger'),   // Phase 5: unencrypted HTTP (readable if sniffed)
+    encrypted: getCSS('--secure'),   // Phase 5: encrypted HTTPS (safe)
+  },
+};
+
+/* ----------------------------------------------------------------------------
+   SECURITY defaults (Phase 5)  —  SSL/TLS certificate lifetime & CA name.
+   Educators can shorten `certDays` to demo expiry, or rename the issuer.
+   ---------------------------------------------------------------------------- */
+const SECURITY = {
+  issuer:   "Let's Encrypt (Simulated)",
+  certDays: 90,       // simulated certificate validity in days
+  // For teaching expiry, an educator can set a cert's `expires` into the past,
+  // or use the "issue expired cert" option in the SSL panel.
+};
+
+
+/* ============================================================================
+   2. STATE  —  the single source of truth for the whole simulation
+   ============================================================================
+   Keeping everything in one object makes save/load (Phase 7) trivial and lets
+   educators inspect the full simulation from the browser console via `SIM`.
+   ========================================================================== */
+const SIM = {
+  nodes: [],          // array of node objects (see makeNode)
+  links: [],          // array of link objects { id, a, b }  (a,b = node ids)
+  selectedId: null,   // currently selected node id (or null)
+  selectedLinkId: null, // currently selected link id (or null)
+  hoverId: null,      // node currently under the mouse (for hover ring)
+  mode: 'select',     // 'select' | 'connect'
+  connectFrom: null,  // when in connect mode, the first-clicked node id
+  log: [],            // feedback log entries { t, level, msg }
+  packets: [],        // in-flight animated packets (see spawnPacket)
+  leases: {},         // DHCP leases: { hostNumber: nodeId } for the LAN pool
+  mitmActive: false,  // Phase 5: is a man-in-the-middle eavesdropper active?
+  _nextId: 1,         // internal id sequence
+  _animating: false,  // whether the rAF packet loop is currently running
+};
+
+
+/* ============================================================================
+   3. UTILITIES
+   ========================================================================== */
+
+/** Read a CSS custom property from :root (used so JS matches the theme). */
+function getCSS(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/** Generate a short unique id. */
+function uid(prefix) { return (prefix || 'n') + (SIM._nextId++); }
+
+/** Distance between two points. */
+function dist(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
+
+/** Clamp a value between min and max. */
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+/** Current time as HH:MM:SS for the log. */
+function nowStamp() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8);
+}
+
+/** Draw a rounded rectangle path on a canvas context (helper for badges). */
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y,     x + w, y + h, r);
+  c.arcTo(x + w, y + h, x,     y + h, r);
+  c.arcTo(x,     y + h, x,     y,     r);
+  c.arcTo(x,     y,     x + w, y,     r);
+  c.closePath();
+}
+
+
+/* ============================================================================
+   4. LOGGING / FEEDBACK
+   ============================================================================
+   logMsg(message, level) prints to the footer log. Levels map to colours:
+   'info' | 'secure' | 'danger' | 'warning' | '' (neutral).
+   Later phases route DNS/firewall/SSL results here.
+   ========================================================================== */
+const logEl = document.getElementById('log');
+
+function logMsg(msg, level = '') {
+  SIM.log.push({ t: nowStamp(), level, msg });
+  const line = document.createElement('div');
+  line.className = 'line ' + level;
+  line.innerHTML = `<span class="time">${nowStamp()}</span><span class="msg"></span>`;
+  line.querySelector('.msg').textContent = msg; // textContent avoids HTML injection
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+document.getElementById('action-clearlog').addEventListener('click', () => {
+  SIM.log = [];
+  logEl.innerHTML = '';
+  logMsg('Log cleared.', 'info');
+});
+
+
+/* ============================================================================
+   5. NODE + LINK MODEL
+   ========================================================================== */
+
+/**
+ * Create a node object. In Phase 1 the node mostly carries position + identity;
+ * later phases populate `config` and `services` (IP address, DHCP, DNS zones,
+ * firewall rules, SSL certs, hosted pages, etc.).
+ */
+function makeNode(type, x, y) {
+  const def = DEVICE_TYPES[type];
+  NAME_COUNTERS[type] = (NAME_COUNTERS[type] || 0) + 1;
+  const node = {
+    id: uid(type + '-'),
+    type,
+    name: def.label.split('/')[0] + '-' + NAME_COUNTERS[type], // e.g. "PC-1", "Router-1"
+    x, y,
+    // config holds addressing (populated by DHCP / defaults):
+    //   ip       : assigned LAN IP address (string) or null
+    //   gateway  : default gateway IP (string) or null
+    //   dns      : DNS server IP the client will query (string) or null
+    //   dhcp     : (routers only) whether the DHCP server is enabled
+    //   wanIp    : (routers only) the public/WAN-side IP
+    config: {},
+    services: {},    // e.g. { web:{...}, dns:{...}, mail:{...}, file:{...} } (Phase 3)
+  };
+
+  // Type-specific defaults ------------------------------------------------
+  if (type === 'router') {
+    // The router is the LAN gateway and runs a DHCP server by default.
+    node.config.ip      = NETWORK.lanPrefix + NETWORK.gatewayHost; // e.g. 192.168.1.1
+    node.config.gateway = null;                                    // the router IS the gateway
+    node.config.wanIp   = NETWORK.wanPrefix + '1';                 // simulated public IP
+    node.config.dhcp    = true;                                    // DHCP server on
+    // Firewall (Phase 5): ordered list of rules evaluated top-to-bottom.
+    //   { action:'allow'|'block', dir:'any'|'in'|'out', ip:'any'|'1.2.3.4', port:'any'|80 }
+    // `defaultAction` applies when no rule matches. Default is permissive so
+    // beginners' traffic flows until they add rules.
+    node.config.firewall = { enabled: false, defaultAction: 'allow', rules: [] };
+  }
+  // PCs and servers start with no IP until DHCP assigns one (or manual set).
+  if (type === 'pc' || type === 'server') {
+    node.config.ip      = null;
+    node.config.gateway = null;
+    node.config.dns     = null;
+  }
+
+  // Servers can host services. Each service has an `enabled` flag plus its own
+  // data (DNS zones/records, hosted web page HTML, etc.). All start disabled so
+  // students consciously turn on what they need.
+  if (type === 'server') {
+    node.services = {
+      // Web service. `cert` holds a simulated TLS certificate once issued:
+      //   { domain, issuer, issued (ms), expires (ms), selfSigned:false }
+      // `forceHttps` (Phase 5) makes the server redirect/refuse plain HTTP.
+      web:  { enabled: false, html: '<h1>Welcome to my site</h1>\n<p>This page is served by the web server.</p>', cert: null, forceHttps: false },
+      // DNS zones: array of records { type:'A'|'CNAME', name:'www.site.local', value:'192.168.1.101' | 'target.domain' }
+      dns:  { enabled: false, records: [] },
+      mail: { enabled: false },
+      file: { enabled: false },
+    };
+  }
+  return node;
+}
+
+/** Add a node near the centre of the visible canvas (with slight scatter). */
+function addNode(type) {
+  const rect = canvas.getBoundingClientRect();
+  // Scatter around centre so repeated adds don't stack perfectly.
+  const jitter = () => (Math.random() - 0.5) * 120;
+  const x = clamp(rect.width / 2 + jitter(), 60, rect.width - 60);
+  const y = clamp(rect.height / 2 + jitter(), 60, rect.height - 60);
+  const node = makeNode(type, x, y);
+  SIM.nodes.push(node);
+  selectNode(node.id);
+  logMsg(`Added ${DEVICE_TYPES[type].label} "${node.name}".`, 'info');
+  refreshUI();
+}
+
+/** Look up a node by id. */
+function getNode(id) { return SIM.nodes.find(n => n.id === id) || null; }
+
+/** Look up a link by id. */
+function getLink(id) { return SIM.links.find(l => l.id === id) || null; }
+
+/** Does a link already exist between two nodes (in either direction)? */
+function linkExists(a, b) {
+  return SIM.links.some(l => (l.a === a && l.b === b) || (l.a === b && l.b === a));
+}
+
+/** Create a link between two node ids (guards against dupes and self-links). */
+function addLink(a, b) {
+  if (a === b) { logMsg('Cannot connect a device to itself.', 'warning'); return; }
+  if (linkExists(a, b)) { logMsg('Those devices are already connected.', 'warning'); return; }
+  const link = { id: uid('link-'), a, b };
+  SIM.links.push(link);
+  const na = getNode(a), nb = getNode(b);
+  logMsg(`Connected ${na.name} ↔ ${nb.name}.`, 'secure');
+  syncDnsPointer(); // a newly-connected DNS server may now be reachable
+  refreshUI();
+}
+
+/** Delete a node and any links attached to it. */
+function deleteNode(id) {
+  const node = getNode(id);
+  if (!node) return;
+  SIM.links = SIM.links.filter(l => l.a !== id && l.b !== id);
+  SIM.nodes = SIM.nodes.filter(n => n.id !== id);
+  dhcpRelease(id); // free any DHCP lease this node held
+  if (SIM.selectedId === id) SIM.selectedId = null;
+  logMsg(`Deleted ${node.name} (and its links).`, 'danger');
+  refreshUI();
+}
+
+/** Delete a single link. */
+function deleteLink(id) {
+  const link = getLink(id);
+  if (!link) return;
+  SIM.links = SIM.links.filter(l => l.id !== id);
+  if (SIM.selectedLinkId === id) SIM.selectedLinkId = null;
+  logMsg('Deleted a link.', 'danger');
+  refreshUI();
+}
+
+
+/* ============================================================================
+   5b. ADDRESSING, DHCP & ROUTING  (Phase 2)
+   ============================================================================
+   A deliberately-simplified model suitable for teaching:
+     - There is ONE logical LAN using NETWORK.lanPrefix (e.g. 192.168.1.x).
+     - A router acts as the gateway (.1) and runs a DHCP server.
+     - PCs/servers obtain a LAN IP from the DHCP pool (.100–.199 by default).
+     - Routing is done by finding a physical PATH through the topology graph
+       (PC → switch → router → server, etc.). This mirrors how students draw
+       networks without needing full routing tables.
+   ========================================================================== */
+
+/** Return the first router node on the canvas (the LAN gateway), or null. */
+function findRouter() {
+  return SIM.nodes.find(n => n.type === 'router') || null;
+}
+
+/** Return the router that has DHCP enabled, or null. */
+function findDhcpServer() {
+  return SIM.nodes.find(n => n.type === 'router' && n.config.dhcp) || null;
+}
+
+/**
+ * Breadth-first search for a path of node ids from `srcId` to `dstId` across
+ * the physical links. Returns an array of node ids (inclusive) or null if the
+ * two devices are not connected.
+ */
+function findPath(srcId, dstId) {
+  if (srcId === dstId) return [srcId];
+  const visited = new Set([srcId]);
+  const queue = [[srcId]];
+  while (queue.length) {
+    const path = queue.shift();
+    const last = path[path.length - 1];
+    // Neighbours of `last`:
+    const neighbours = SIM.links
+      .filter(l => l.a === last || l.b === last)
+      .map(l => (l.a === last ? l.b : l.a));
+    for (const nb of neighbours) {
+      if (visited.has(nb)) continue;
+      const newPath = path.concat(nb);
+      if (nb === dstId) return newPath;
+      visited.add(nb);
+      queue.push(newPath);
+    }
+  }
+  return null; // no route
+}
+
+/**
+ * Assign a DHCP lease to a node. Finds the lowest free host number in the pool,
+ * records the lease, and writes ip/gateway/dns into the node's config.
+ * Returns the assigned IP string, or null if no DHCP server / pool exhausted /
+ * no physical route to the DHCP server.
+ */
+function dhcpRequest(node) {
+  const dhcp = findDhcpServer();
+  if (!dhcp) {
+    logMsg(`DHCP: ${node.name} found no DHCP server (add a Router).`, 'warning');
+    return null;
+  }
+  // The client must be physically able to reach the router.
+  const path = findPath(node.id, dhcp.id);
+  if (!path) {
+    logMsg(`DHCP: ${node.name} is not connected to the network — no lease.`, 'warning');
+    return null;
+  }
+
+  // If it already holds a lease, keep it (idempotent renew).
+  const existing = Object.entries(SIM.leases).find(([, id]) => id === node.id);
+  let hostNum;
+  if (existing) {
+    hostNum = Number(existing[0]);
+  } else {
+    // Find the lowest free host number within the configured pool.
+    hostNum = null;
+    for (let h = NETWORK.dhcpStart; h <= NETWORK.dhcpEnd; h++) {
+      if (!SIM.leases[h]) { hostNum = h; break; }
+    }
+    if (hostNum === null) {
+      logMsg(`DHCP: address pool exhausted — no lease for ${node.name}.`, 'danger');
+      return null;
+    }
+    SIM.leases[hostNum] = node.id;
+  }
+
+  const ip = NETWORK.lanPrefix + hostNum;
+  const dnsSrv = findDnsServer();                          // Phase 3: real DNS server if any
+  node.config.ip      = ip;
+  node.config.gateway = dhcp.config.ip;                    // router LAN IP
+  node.config.dns     = (dnsSrv && dnsSrv.config.ip) || dhcp.config.ip; // DNS server or gateway
+
+  // Animate the DHCP handshake (client → router → client) then log success.
+  animateRoundTrip(node.id, dhcp.id, 'dhcp', () => {
+    logMsg(`DHCP: ${node.name} leased ${ip} (gw ${node.config.gateway}).`, 'secure');
+    refreshUI();
+  });
+  return ip;
+}
+
+/** Release a node's DHCP lease (e.g. on delete or manual release). */
+function dhcpRelease(nodeId) {
+  for (const [h, id] of Object.entries(SIM.leases)) {
+    if (id === nodeId) delete SIM.leases[h];
+  }
+}
+
+
+/* ============================================================================
+   5d. SERVICES & DNS RESOLUTION  (Phase 3)
+   ============================================================================
+   Servers host services (web/dns/mail/file). This section provides:
+     - discovery helpers (find the DNS server on the LAN, list services)
+     - a DNS resolver that follows A and CNAME records
+   The client terminal (Phase 4) and security checks (Phase 5/6) build on these.
+   ========================================================================== */
+
+/** Return the first server that has the DNS service enabled, or null. */
+function findDnsServer() {
+  return SIM.nodes.find(n => n.type === 'server' && n.services && n.services.dns && n.services.dns.enabled) || null;
+}
+
+/** Find a server node by its assigned IP address (or null). */
+function findServerByIp(ip) {
+  return SIM.nodes.find(n => n.config && n.config.ip === ip) || null;
+}
+
+/** True if a server hosts a given service and it is enabled. */
+function hasService(node, key) {
+  return !!(node && node.type === 'server' && node.services && node.services[key] && node.services[key].enabled);
+}
+
+/**
+ * Resolve a domain name to an IP using the DNS server's records.
+ * Follows CNAME chains (up to a small limit to avoid loops) then resolves the
+ * final A record. Returns { ip, chain:[...], error } — `ip` is null on failure.
+ *
+ * This is a teaching-grade resolver: a single authoritative DNS server holds
+ * all zones/records; there is no recursion to the "real" internet.
+ */
+function resolveDomain(domain) {
+  const dns = findDnsServer();
+  const chain = [];
+  if (!dns) return { ip: null, chain, error: 'No DNS server is running on the network.' };
+
+  const records = dns.services.dns.records || [];
+  let name = domain.toLowerCase();
+  const MAX_HOPS = 8; // CNAME loop guard
+
+  for (let i = 0; i < MAX_HOPS; i++) {
+    // Prefer an A record for the current name.
+    const a = records.find(r => r.type === 'A' && r.name.toLowerCase() === name);
+    if (a) { chain.push(`${name} A ${a.value}`); return { ip: a.value, chain, error: null }; }
+
+    // Otherwise follow a CNAME.
+    const cname = records.find(r => r.type === 'CNAME' && r.name.toLowerCase() === name);
+    if (cname) { chain.push(`${name} CNAME ${cname.value}`); name = cname.value.toLowerCase(); continue; }
+
+    // No record for this name.
+    return { ip: null, chain, error: `No DNS record found for "${name}".` };
+  }
+  return { ip: null, chain, error: 'CNAME chain too long (possible loop).' };
+}
+
+/** After topology changes, keep clients' DNS pointer aimed at the live DNS server. */
+function syncDnsPointer() {
+  const dns = findDnsServer();
+  NETWORK.dnsHost = dns ? dns.config.ip : null;
+  // Update any client whose DNS was auto-assigned to the gateway/none.
+  SIM.nodes.forEach(n => {
+    if ((n.type === 'pc' || n.type === 'server') && n.config.ip) {
+      // Only auto-update if the client currently has a lease (gateway set).
+      if (n.config.gateway) n.config.dns = NETWORK.dnsHost || n.config.gateway;
+    }
+  });
+}
+
+
+/* ============================================================================
+   5e. SECURITY  —  FIREWALL, SSL/TLS CERTIFICATES  (Phase 5)
+   ============================================================================
+   - Firewall: routers can filter traffic by destination IP + port. Rules are
+     evaluated in order; the first match wins; otherwise `defaultAction` applies.
+   - SSL/TLS: web servers can be issued a simulated "Let's Encrypt" certificate.
+     HTTPS connections validate the cert (present? matches domain? not expired?).
+   ========================================================================== */
+
+/** Return the firewall config of any router along `path` that has it enabled. */
+function firewallOnPath(path) {
+  for (const id of path) {
+    const n = getNode(id);
+    if (n && n.type === 'router' && n.config.firewall && n.config.firewall.enabled) {
+      return { node: n, fw: n.config.firewall, index: path.indexOf(id) };
+    }
+  }
+  return null;
+}
+
+/**
+ * Evaluate a firewall against a connection to (dstIp, dstPort).
+ * Returns { allowed:boolean, rule } — `rule` is the matching rule (or null for
+ * the default action). Matching is simple: 'any' matches anything, otherwise
+ * exact match on ip / port.
+ */
+function firewallDecision(fw, dstIp, dstPort) {
+  for (const r of fw.rules) {
+    const ipMatch   = (r.ip === 'any' || r.ip === dstIp);
+    const portMatch = (r.port === 'any' || String(r.port) === String(dstPort));
+    if (ipMatch && portMatch) {
+      return { allowed: r.action === 'allow', rule: r };
+    }
+  }
+  return { allowed: fw.defaultAction === 'allow', rule: null };
+}
+
+/** Human-readable description of a firewall rule. */
+function describeRule(r) {
+  const ip = r.ip === 'any' ? 'any IP' : r.ip;
+  const port = r.port === 'any' ? 'any port' : 'port ' + r.port;
+  return `${r.action.toUpperCase()} ${ip} : ${port}`;
+}
+
+/* ---- SSL / TLS certificates ---------------------------------------------- */
+
+/**
+ * Issue a simulated certificate for `domain` on a web server.
+ * `opts.expired` forces an already-expired cert (for teaching).
+ * `opts.selfSigned` marks it self-signed (browsers will warn).
+ */
+function issueCertificate(server, domain, opts = {}) {
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const cert = {
+    domain,
+    issuer: opts.selfSigned ? 'Self-Signed' : SECURITY.issuer,
+    selfSigned: !!opts.selfSigned,
+    issued: opts.expired ? now - 200 * dayMs : now,
+    expires: opts.expired ? now - 110 * dayMs : now + SECURITY.certDays * dayMs,
+  };
+  server.services.web.cert = cert;
+  return cert;
+}
+
+/**
+ * Validate a web server's certificate for a requested `domain`.
+ * Returns { valid, reason, cert }. Used by HTTPS curl/browser requests and by
+ * the pen-test module (Phase 6).
+ */
+function validateCertificate(server, domain) {
+  const cert = server.services.web && server.services.web.cert;
+  if (!cert) return { valid: false, reason: 'no-cert', cert: null };
+  const now = Date.now();
+  if (now > cert.expires) return { valid: false, reason: 'expired', cert };
+  if (now < cert.issued)  return { valid: false, reason: 'not-yet-valid', cert };
+  // Domain match: exact, or wildcard-ish (cert domain is a suffix of request).
+  const d = domain.toLowerCase(), cd = cert.domain.toLowerCase();
+  if (d !== cd && !d.endsWith('.' + cd) && cd !== '*') {
+    return { valid: false, reason: 'domain-mismatch', cert };
+  }
+  if (cert.selfSigned) return { valid: false, reason: 'self-signed', cert };
+  return { valid: true, reason: 'ok', cert };
+}
+
+/** Friendly message for a certificate validation reason. */
+function certReasonText(reason, cert, domain) {
+  switch (reason) {
+    case 'ok':              return `valid certificate for ${cert.domain} (issued by ${cert.issuer}).`;
+    case 'no-cert':         return `no TLS certificate installed — HTTPS unavailable.`;
+    case 'expired':         return `certificate EXPIRED on ${new Date(cert.expires).toLocaleDateString()}.`;
+    case 'not-yet-valid':   return `certificate is not valid yet.`;
+    case 'domain-mismatch': return `certificate is for "${cert.domain}", not "${domain}".`;
+    case 'self-signed':     return `certificate is self-signed (not trusted by browsers).`;
+    default:                return `certificate problem.`;
+  }
+}
+
+
+/* ============================================================================
+   5c. PACKET ANIMATION ENGINE  (Phase 2)
+   ============================================================================
+   The reusable core that every later phase builds on (ping, curl, DNS lookups,
+   firewall drops, encrypted vs plain-text packets, DDoS floods, …).
+
+   A "packet" travels along a PATH (array of node ids). We animate it hop-by-hop
+   between consecutive nodes. Packets carry:
+     path      : [nodeId, nodeId, …]
+     seg       : index of the current hop (0-based)
+     t         : progress 0..1 along the current hop
+     kind      : 'request'|'reply'|'dropped'|'dhcp'|'info'|'plaintext'|'encrypted'
+     label     : optional short text drawn near the packet
+     onArrive  : callback fired when the packet reaches the final node
+     dropAt    : optional node index at which the packet should "drop" (Phase 5)
+     onDrop    : callback fired if the packet is dropped
+     secure    : true → draw a padlock (encrypted); false → readable plaintext
+     payload   : short text "carried" by the packet (shown when intercepted)
+     intercept : true → an eavesdropper icon reads the packet mid-flight (MITM)
+   ========================================================================== */
+
+/**
+ * Spawn a packet that travels along `path`. Returns the packet object.
+ * `opts` may include: kind, label, onArrive, onDrop, dropAt, speed, secure,
+ * payload, intercept.
+ */
+function spawnPacket(path, opts = {}) {
+  if (!path || path.length < 2) return null;
+  const pkt = {
+    id: uid('pkt-'),
+    path,
+    seg: 0,
+    t: 0,
+    kind: opts.kind || 'request',
+    label: opts.label || '',
+    onArrive: opts.onArrive || null,
+    onDrop: opts.onDrop || null,
+    dropAt: (opts.dropAt != null) ? opts.dropAt : -1,
+    speed: opts.speed || PACKET.speed,
+    dead: false,
+    secure: !!opts.secure,          // Phase 5: encrypted?
+    payload: opts.payload || '',    // Phase 5: what it carries
+    intercept: !!opts.intercept,    // Phase 5: MITM eavesdropper present?
+  };
+  SIM.packets.push(pkt);
+  startAnimationLoop();
+  return pkt;
+}
+
+/**
+ * Convenience: send a request from src to dst and, on arrival, send a reply
+ * back. Fires `onComplete` after the reply returns. Used by ping/DHCP/etc.
+ */
+function animateRoundTrip(srcId, dstId, kind, onComplete) {
+  const path = findPath(srcId, dstId);
+  if (!path) {
+    logMsg('No route between those devices.', 'danger');
+    if (onComplete) onComplete(false);
+    return;
+  }
+  spawnPacket(path, {
+    kind: kind === 'dhcp' ? 'dhcp' : 'request',
+    onArrive: () => {
+      // Reply travels the reverse path.
+      spawnPacket(path.slice().reverse(), {
+        kind: kind === 'dhcp' ? 'dhcp' : 'reply',
+        onArrive: () => { if (onComplete) onComplete(true); },
+      });
+    },
+  });
+}
+
+/**
+ * Security-aware service request (Phase 5). Sends a request from src → dst on a
+ * given (dstIp, port), applying firewall filtering and encryption visualisation.
+ *
+ * opts:
+ *   dstIp, port      : destination for firewall matching
+ *   secure           : true → encrypted (padlock) packet; false → plaintext
+ *   payload          : short readable string carried in plaintext
+ *   intercept        : true → show a MITM eavesdropper reading the packet
+ *   onDeliver()      : called when the request reaches the server (send reply)
+ *   onBlocked(rule)  : called if the firewall drops it
+ *
+ * Returns false immediately if there's no route.
+ */
+function sendServiceRequest(srcId, dstId, opts = {}) {
+  const path = findPath(srcId, dstId);
+  if (!path) { if (opts.onNoRoute) opts.onNoRoute(); return false; }
+
+  // Firewall check along the path.
+  const fwHit = firewallOnPath(path);
+  let dropAt = -1, blockedRule = null;
+  if (fwHit) {
+    const decision = firewallDecision(fwHit.fw, opts.dstIp, opts.port);
+    if (!decision.allowed) {
+      dropAt = fwHit.index;      // drop when the packet reaches the firewall
+      blockedRule = decision.rule;
+    }
+  }
+
+  const kind = dropAt >= 0 ? 'dropped'
+             : opts.secure ? 'encrypted' : 'plaintext';
+
+  spawnPacket(path, {
+    kind,
+    secure: !!opts.secure,
+    payload: opts.payload || '',
+    intercept: !!opts.intercept,
+    dropAt,
+    onDrop: () => { if (opts.onBlocked) opts.onBlocked(blockedRule, fwHit.node); },
+    onArrive: () => {
+      // Reached the server — send the reply back.
+      spawnPacket(path.slice().reverse(), {
+        kind: opts.secure ? 'encrypted' : 'reply',
+        secure: !!opts.secure,
+        payload: opts.secure ? '' : 'response',
+        intercept: !!opts.intercept,
+        onArrive: () => { if (opts.onDeliver) opts.onDeliver(); },
+      });
+    },
+  });
+  return true;
+}
+
+/** Advance every packet by one frame. Returns true if any packet is alive. */
+function stepPackets() {
+  for (const pkt of SIM.packets) {
+    if (pkt.dead) continue;
+    const aId = pkt.path[pkt.seg];
+    const bId = pkt.path[pkt.seg + 1];
+    const a = getNode(aId), b = getNode(bId);
+    if (!a || !b) { pkt.dead = true; continue; } // a node was deleted mid-flight
+
+    const segLen = dist(a.x, a.y, b.x, b.y) || 1;
+    pkt.t += pkt.speed / segLen;
+
+    if (pkt.t >= 1) {
+      // Reached node b (end of this hop).
+      pkt.t = 0;
+      pkt.seg++;
+
+      // If configured to drop at this node index, kill it here (Phase 5).
+      if (pkt.dropAt === pkt.seg) {
+        pkt.dead = true;
+        if (pkt.onDrop) pkt.onDrop();
+        continue;
+      }
+      // Reached the final node?
+      if (pkt.seg >= pkt.path.length - 1) {
+        pkt.dead = true;
+        if (pkt.onArrive) pkt.onArrive();
+      }
+    }
+  }
+  // Remove finished packets.
+  SIM.packets = SIM.packets.filter(p => !p.dead);
+  return SIM.packets.length > 0;
+}
+
+/** Compute the current screen position of a packet. */
+function packetPos(pkt) {
+  const a = getNode(pkt.path[pkt.seg]);
+  const b = getNode(pkt.path[pkt.seg + 1]);
+  if (!a || !b) return null;
+  // Ease slightly for a nicer feel.
+  const t = pkt.t;
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+/** Draw all in-flight packets (called from draw()). */
+function drawPackets() {
+  for (const pkt of SIM.packets) {
+    const p = packetPos(pkt);
+    if (!p) continue;
+    const color = PACKET.colors[pkt.kind] || PACKET.colors.info;
+
+    ctx.save();
+    // Glow halo.
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, PACKET.radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Phase 5: encrypted packets show a padlock; plaintext shows a small "eye"
+    // to convey they're readable. Otherwise a plain white core dot.
+    if (pkt.kind === 'encrypted' || pkt.secure) {
+      ctx.font = (PACKET.radius * 1.1) + 'px -apple-system, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('🔒', p.x, p.y + 1);
+    } else if (pkt.kind === 'plaintext') {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, PACKET.radius * 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, PACKET.radius * 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+    }
+
+    // Phase 5: MITM interceptor — draw a spy glyph + the readable payload above
+    // a plaintext packet, or a "•••" for an encrypted one (can't be read).
+    if (pkt.intercept) {
+      ctx.font = '15px -apple-system, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText('🕵️', p.x + 16, p.y - PACKET.radius - 2);
+      const readable = pkt.secure ? '••••••••' : (pkt.payload || 'plaintext');
+      ctx.font = '600 11px "SF Mono", monospace';
+      ctx.fillStyle = pkt.secure ? getCSS('--secure') : getCSS('--danger');
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText(readable, p.x, p.y - PACKET.radius - 4);
+    } else if (pkt.label) {
+      // Optional label.
+      ctx.font = '600 11px -apple-system, sans-serif';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(pkt.label, p.x, p.y - PACKET.radius - 3);
+    }
+    ctx.restore();
+  }
+}
+
+/**
+ * requestAnimationFrame loop. Runs only while packets exist, then stops to save
+ * CPU. Each frame advances packets and redraws the whole canvas.
+ */
+function startAnimationLoop() {
+  if (SIM._animating) return;
+  SIM._animating = true;
+  function frame() {
+    const alive = stepPackets();
+    draw();
+    if (alive) {
+      requestAnimationFrame(frame);
+    } else {
+      SIM._animating = false;
+      refreshUI(); // final tidy render (updates panel counts etc.)
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+
+/* ============================================================================
+   6. CANVAS SETUP + RENDERING
+   ========================================================================== */
+const canvas = document.getElementById('topology');
+const ctx = canvas.getContext('2d');
+const canvasWrap = document.getElementById('canvasWrap');
+
+// Handle high-DPI displays so lines/text are crisp.
+let DPR = window.devicePixelRatio || 1;
+
+/** Resize the canvas backing store to match its CSS size × device pixel ratio. */
+function resizeCanvas() {
+  const rect = canvasWrap.getBoundingClientRect();
+  DPR = window.devicePixelRatio || 1;
+  canvas.width  = Math.round(rect.width  * DPR);
+  canvas.height = Math.round(rect.height * DPR);
+  canvas.style.width  = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); // draw in CSS pixels
+  draw();
+}
+window.addEventListener('resize', resizeCanvas);
+
+/** Main draw loop entry point (called on every change / interaction). */
+function draw() {
+  const w = canvas.width / DPR;
+  const h = canvas.height / DPR;
+  ctx.clearRect(0, 0, w, h);
+
+  drawGrid(w, h);
+  drawLinks();
+  drawNodes();
+  drawPackets(); // Phase 2: animated packets drawn on top of everything
+  drawMitmBanner(w); // Phase 5: eavesdropper warning banner
+}
+
+/** Phase 5: show a small banner when the MITM eavesdropper is active. */
+function drawMitmBanner(w) {
+  if (!SIM.mitmActive) return;
+  const text = '🕵️ MITM eavesdropper active — unencrypted traffic is being intercepted';
+  ctx.save();
+  ctx.font = '600 12px -apple-system, sans-serif';
+  const tw = ctx.measureText(text).width + 24;
+  const x = (w - tw) / 2, y = 12;
+  ctx.fillStyle = getCSS('--danger-soft');
+  ctx.strokeStyle = getCSS('--danger');
+  ctx.lineWidth = 1;
+  roundRect(ctx, x, y, tw, 28, 14);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = getCSS('--danger');
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, w / 2, y + 15);
+  ctx.restore();
+}
+
+/** Subtle dot grid to give the canvas a technical, tidy feel. */
+function drawGrid(w, h) {
+  ctx.save();
+  ctx.fillStyle = CANVAS.gridDot;
+  const g = CANVAS.gridSize;
+  for (let x = g; x < w; x += g) {
+    for (let y = g; y < h; y += g) {
+      ctx.beginPath();
+      ctx.arc(x, y, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/** Draw all links (lines between connected nodes). */
+function drawLinks() {
+  SIM.links.forEach(link => {
+    const a = getNode(link.a), b = getNode(link.b);
+    if (!a || !b) return;
+    const selected = link.id === SIM.selectedLinkId;
+    ctx.save();
+    ctx.strokeStyle = selected ? CANVAS.linkColorSel : CANVAS.linkColor;
+    ctx.lineWidth = selected ? CANVAS.linkWidth + 1.5 : CANVAS.linkWidth;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // While connecting, draw a "rubber band" from the first node to the cursor.
+  if (SIM.mode === 'connect' && SIM.connectFrom) {
+    const a = getNode(SIM.connectFrom);
+    if (a && mouse.x != null) {
+      ctx.save();
+      ctx.strokeStyle = CANVAS.linkColorSel;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(mouse.x, mouse.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
+/** Draw every node with icon, ring states, and label. */
+function drawNodes() {
+  SIM.nodes.forEach(node => {
+    const def = DEVICE_TYPES[node.type];
+    const r = def.radius;
+    const isSelected = node.id === SIM.selectedId;
+    const isHover = node.id === SIM.hoverId;
+    const isConnectFrom = node.id === SIM.connectFrom;
+
+    ctx.save();
+
+    // Soft drop shadow for depth.
+    ctx.shadowColor = 'rgba(16,24,40,0.12)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 3;
+
+    // Node body (rounded circle).
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.shadowColor = 'transparent'; // stop shadow bleeding onto strokes
+
+    // Coloured inner ring by device type.
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = def.color;
+    ctx.stroke();
+
+    // Selection / hover / connect ring (outer).
+    if (isSelected || isConnectFrom) {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r + 5, 0, Math.PI * 2);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = CANVAS.selectRing;
+      ctx.setLineDash(isConnectFrom ? [5, 4] : []);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else if (isHover) {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r + 4, 0, Math.PI * 2);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = CANVAS.hoverRing;
+      ctx.stroke();
+    }
+
+    // Emoji icon centred in the node.
+    ctx.font = (r * 0.9) + 'px ' + '-apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(def.emoji, node.x, node.y + 1);
+
+    // Node name label below.
+    ctx.font = '600 12px -apple-system, sans-serif';
+    ctx.fillStyle = isSelected ? CANVAS.selectRing : CANVAS.labelColor;
+    ctx.fillText(node.name, node.x, node.y + r + 15);
+
+    // Device type sub-label (muted).
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.fillStyle = CANVAS.labelMuted;
+    ctx.fillText(def.label, node.x, node.y + r + 30);
+
+    // IP address label (Phase 2) — shown in monospace when the device has one.
+    if (node.config && node.config.ip) {
+      ctx.font = '11px "SF Mono", Menlo, monospace';
+      ctx.fillStyle = getCSS('--info');
+      ctx.fillText(node.config.ip, node.x, node.y + r + 45);
+    }
+
+    ctx.restore();
+
+    // Service badges (Phase 3) — small pills above a server showing enabled
+    // services (🌐 DNS 🧭 etc.). Drawn outside the save/restore so they use
+    // fresh state.
+    if (node.type === 'server' && node.services) {
+      const active = Object.keys(SERVICE_DEFS).filter(k => node.services[k] && node.services[k].enabled);
+      if (active.length) {
+        const badgeY = node.y - r - 14;
+        const glyphs = active.map(k => SERVICE_DEFS[k].emoji).join(' ');
+        ctx.save();
+        ctx.font = '13px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const w2 = ctx.measureText(glyphs).width + 14;
+        // pill background
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = getCSS('--border-strong');
+        ctx.lineWidth = 1;
+        roundRect(ctx, node.x - w2 / 2, badgeY - 11, w2, 22, 11);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = getCSS('--text');
+        ctx.fillText(glyphs, node.x, badgeY + 1);
+        ctx.restore();
+      }
+    }
+  });
+}
+
+
+/* ============================================================================
+   7. INTERACTION  —  mouse handling: hit-testing, select, drag, connect
+   ========================================================================== */
+
+// Track pointer position (in CSS pixels relative to the canvas).
+const mouse = { x: null, y: null, downX: 0, downY: 0 };
+let dragging = null;      // node currently being dragged
+let dragMoved = false;    // did the pointer move enough to count as a drag?
+let dragOffset = { x: 0, y: 0 };
+
+/** Convert a mouse event to canvas-local coordinates. */
+function toCanvasCoords(evt) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+}
+
+/** Return the top-most node under a point (or null). */
+function nodeAt(x, y) {
+  // Iterate in reverse so the last-drawn (top-most) node wins.
+  for (let i = SIM.nodes.length - 1; i >= 0; i--) {
+    const n = SIM.nodes[i];
+    if (dist(x, y, n.x, n.y) <= DEVICE_TYPES[n.type].radius) return n;
+  }
+  return null;
+}
+
+/** Return a link near a point (for click-to-select links), or null. */
+function linkAt(x, y) {
+  const TOL = 6; // px tolerance
+  for (const link of SIM.links) {
+    const a = getNode(link.a), b = getNode(link.b);
+    if (!a || !b) continue;
+    if (pointToSegment(x, y, a.x, a.y, b.x, b.y) <= TOL) return link;
+  }
+  return null;
+}
+
+/** Distance from point P to line segment AB. */
+function pointToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return dist(px, py, ax, ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+  t = clamp(t, 0, 1);
+  return dist(px, py, ax + t * dx, ay + t * dy);
+}
+
+/** Select a node (updates state + config panel). Pass null to clear. */
+function selectNode(id) {
+  SIM.selectedId = id;
+  SIM.selectedLinkId = null;
+  refreshUI();
+}
+
+/** Select a link (updates state + config panel). */
+function selectLink(id) {
+  SIM.selectedLinkId = id;
+  SIM.selectedId = null;
+  refreshUI();
+}
+
+// ---- Mouse down: begin drag, select, or connect ---------------------------
+canvas.addEventListener('mousedown', (evt) => {
+  const p = toCanvasCoords(evt);
+  mouse.downX = p.x; mouse.downY = p.y;
+  dragMoved = false;
+
+  const node = nodeAt(p.x, p.y);
+
+  if (SIM.mode === 'connect') {
+    // In connect mode, first click picks the source, second click completes.
+    if (node) {
+      if (!SIM.connectFrom) {
+        SIM.connectFrom = node.id;
+        logMsg(`Connect: pick a second device to link with ${node.name}.`, 'info');
+      } else {
+        addLink(SIM.connectFrom, node.id);
+        SIM.connectFrom = null;
+      }
+    } else {
+      // Clicking empty space cancels an in-progress connection.
+      if (SIM.connectFrom) logMsg('Connection cancelled.', 'warning');
+      SIM.connectFrom = null;
+    }
+    draw();
+    return;
+  }
+
+  // Select mode ------------------------------------------------------------
+  if (node) {
+    dragging = node;
+    dragOffset.x = p.x - node.x;
+    dragOffset.y = p.y - node.y;
+    selectNode(node.id);
+    canvas.classList.add('grabbing');
+  } else {
+    // Clicked empty space or a link?
+    const link = linkAt(p.x, p.y);
+    if (link) selectLink(link.id);
+    else { SIM.selectedId = null; SIM.selectedLinkId = null; refreshUI(); }
+  }
+});
+
+// ---- Mouse move: drag node, update hover + rubber-band ---------------------
+canvas.addEventListener('mousemove', (evt) => {
+  const p = toCanvasCoords(evt);
+  mouse.x = p.x; mouse.y = p.y;
+
+  if (dragging) {
+    dragging.x = clamp(p.x - dragOffset.x, 20, canvas.width / DPR - 20);
+    dragging.y = clamp(p.y - dragOffset.y, 20, canvas.height / DPR - 20);
+    if (dist(p.x, p.y, mouse.downX, mouse.downY) > 3) dragMoved = true;
+    draw();
+    return;
+  }
+
+  // Hover detection (for the hover ring + cursor feedback).
+  const node = nodeAt(p.x, p.y);
+  const newHover = node ? node.id : null;
+  if (newHover !== SIM.hoverId) {
+    SIM.hoverId = newHover;
+    canvas.style.cursor = node ? (SIM.mode === 'connect' ? 'crosshair' : 'grab')
+                               : (SIM.mode === 'connect' ? 'crosshair' : 'default');
+    draw();
+  } else if (SIM.mode === 'connect' && SIM.connectFrom) {
+    draw(); // keep the rubber band following the cursor
+  }
+});
+
+// ---- Mouse up: end drag ----------------------------------------------------
+canvas.addEventListener('mouseup', () => {
+  if (dragging) {
+    canvas.classList.remove('grabbing');
+    dragging = null;
+  }
+});
+
+// ---- Mouse leaves canvas: clear hover/rubber-band -------------------------
+canvas.addEventListener('mouseleave', () => {
+  mouse.x = mouse.y = null;
+  if (SIM.hoverId) { SIM.hoverId = null; draw(); }
+});
+
+// ---- Keyboard: Delete removes selection, Esc cancels connect --------------
+window.addEventListener('keydown', (evt) => {
+  // If the terminal/browser modal is open, Esc closes it and other keys are
+  // left for the modal's own inputs.
+  if (!termModal.classList.contains('hidden')) {
+    if (evt.key === 'Escape') closeTerminal();
+    return;
+  }
+  // Same for the pen-test modal.
+  if (!pentestModal.classList.contains('hidden')) {
+    if (evt.key === 'Escape') closePentest();
+    return;
+  }
+
+  // Ignore key presses while typing in a form field.
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  if (evt.key === 'Delete' || evt.key === 'Backspace') {
+    if (SIM.selectedId) deleteNode(SIM.selectedId);
+    else if (SIM.selectedLinkId) deleteLink(SIM.selectedLinkId);
+  } else if (evt.key === 'Escape') {
+    if (SIM.connectFrom) { SIM.connectFrom = null; logMsg('Connection cancelled.', 'warning'); }
+    setMode('select');
+    selectNode(null);
+    draw();
+  }
+});
+
+
+/* ============================================================================
+   8. TOOLBAR + MODE HANDLING
+   ========================================================================== */
+
+// Device palette buttons ("Add PC", etc.)
+document.querySelectorAll('#palette [data-add]').forEach(btn => {
+  btn.addEventListener('click', () => addNode(btn.dataset.add));
+});
+
+const btnConnect = document.getElementById('tool-connect');
+const btnDelete  = document.getElementById('tool-delete');
+
+/** Switch interaction mode between 'select' and 'connect'. */
+function setMode(mode) {
+  SIM.mode = mode;
+  SIM.connectFrom = null;
+  btnConnect.classList.toggle('active', mode === 'connect');
+  canvas.classList.toggle('mode-connect', mode === 'connect');
+  updateStatusChips();
+  draw();
+}
+
+btnConnect.addEventListener('click', () => {
+  setMode(SIM.mode === 'connect' ? 'select' : 'connect');
+  if (SIM.mode === 'connect')
+    logMsg('Connect mode: click a device, then click another to link them.', 'info');
+});
+
+// Delete button acts on the current selection.
+btnDelete.addEventListener('click', () => {
+  if (SIM.selectedId) deleteNode(SIM.selectedId);
+  else if (SIM.selectedLinkId) deleteLink(SIM.selectedLinkId);
+  else logMsg('Select a device or link first, then press Delete.', 'warning');
+});
+
+// MITM eavesdropper toggle (Phase 5). When active, plaintext (HTTP) traffic is
+// shown being read in transit; HTTPS stays as "••••" (encrypted, unreadable).
+const btnMitm = document.getElementById('tool-mitm');
+btnMitm.addEventListener('click', () => {
+  SIM.mitmActive = !SIM.mitmActive;
+  btnMitm.classList.toggle('active', SIM.mitmActive);
+  if (SIM.mitmActive) {
+    logMsg('MITM eavesdropper ENABLED. Unencrypted (HTTP) traffic is now interceptable.', 'danger');
+    logMsg('Tip: curl an http:// site vs an https:// site to compare what a snooper sees.', 'info');
+  } else {
+    logMsg('MITM eavesdropper disabled.', 'info');
+  }
+  draw();
+});
+
+// Clear-everything action.
+document.getElementById('action-clear').addEventListener('click', () => {
+  if (SIM.nodes.length === 0) return;
+  if (!confirm('Remove all devices and links from the canvas?')) return;
+  SIM.nodes = []; SIM.links = []; SIM.packets = []; SIM.leases = {};
+  SIM.mitmActive = false; btnMitm.classList.remove('active');
+  SIM.selectedId = SIM.selectedLinkId = SIM.connectFrom = null;
+  Object.keys(NAME_COUNTERS).forEach(k => NAME_COUNTERS[k] = 0);
+  logMsg('Canvas cleared.', 'danger');
+  refreshUI();
+});
+
+// Project actions (Phase 7): save / load / export / import / example.
+// (These reference functions defined later in section 9d; that's fine because
+//  the handlers only run on click, long after all functions are defined.)
+document.getElementById('action-save').addEventListener('click', saveToBrowser);
+document.getElementById('action-load').addEventListener('click', loadFromBrowser);
+document.getElementById('action-export').addEventListener('click', exportToFile);
+document.getElementById('action-sample').addEventListener('click', () => {
+  if (SIM.nodes.length && !confirm('Replace the current network with the sample scenario?')) return;
+  loadSampleScenario();
+});
+document.getElementById('action-import').addEventListener('click', () =>
+  document.getElementById('importFile').click());
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (file) importFromFile(file);
+  e.target.value = ''; // allow re-importing the same file later
+});
+
+
+/* ============================================================================
+   9. CONFIGURATION PANEL RENDERING
+   ============================================================================
+   In Phase 1 the panel lets you: view device details, rename the device, and
+   see its connections. Later phases inject type-specific sections (DHCP, DNS,
+   web content, firewall rules, SSL, etc.) into renderConfigPanel().
+   ========================================================================== */
+const panelTitle = document.getElementById('panelTitle');
+const panelBadge = document.getElementById('panelBadge');
+const panelBody  = document.getElementById('panelBody');
+
+function renderConfigPanel() {
+  // --- Nothing selected -------------------------------------------------
+  if (!SIM.selectedId && !SIM.selectedLinkId) {
+    panelTitle.textContent = 'Configuration';
+    panelBadge.textContent = 'No selection';
+    panelBody.innerHTML = `
+      <div class="panel-empty">
+        <div class="icon">⚙️</div>
+        <div>Select a device on the canvas to configure it.</div>
+      </div>`;
+    return;
+  }
+
+  // --- A link is selected ----------------------------------------------
+  if (SIM.selectedLinkId) {
+    const link = getLink(SIM.selectedLinkId);
+    const a = getNode(link.a), b = getNode(link.b);
+    panelTitle.textContent = 'Link';
+    panelBadge.textContent = 'Connection';
+    panelBody.innerHTML = `
+      <div class="prop-row"><span class="k">Endpoint A</span><span class="v">${a ? a.name : '—'}</span></div>
+      <div class="prop-row"><span class="k">Endpoint B</span><span class="v">${b ? b.name : '—'}</span></div>
+      <div style="margin-top:16px">
+        <button class="btn danger" id="cfg-del-link">🗑 Delete this link</button>
+      </div>`;
+    document.getElementById('cfg-del-link')
+      .addEventListener('click', () => deleteLink(link.id));
+    return;
+  }
+
+  // --- A node is selected ----------------------------------------------
+  const node = getNode(SIM.selectedId);
+  if (!node) return;
+  const def = DEVICE_TYPES[node.type];
+
+  // Gather the names of directly-connected neighbours.
+  const neighbours = SIM.links
+    .filter(l => l.a === node.id || l.b === node.id)
+    .map(l => getNode(l.a === node.id ? l.b : l.a))
+    .filter(Boolean);
+
+  panelTitle.innerHTML = `<span class="dev-swatch" style="background:${def.color}">${def.emoji}</span> ${def.label}`;
+  panelBadge.textContent = node.id;
+
+  panelBody.innerHTML = `
+    <div class="field">
+      <label for="cfg-name">Device name</label>
+      <input type="text" id="cfg-name" value="${escapeAttr(node.name)}" />
+    </div>
+
+    <div class="section-title">Details</div>
+    <div class="prop-row"><span class="k">Type</span><span class="v">${def.label}</span></div>
+    <div class="prop-row"><span class="k">ID</span><span class="v muted">${node.id}</span></div>
+    <div class="prop-row"><span class="k">Connections</span><span class="v">${neighbours.length}</span></div>
+
+    ${renderAddressingSection(node)}
+
+    ${renderServicesSection(node)}
+
+    <div class="section-title">Connected to</div>
+    ${
+      neighbours.length
+        ? neighbours.map(n => `<div class="prop-row"><span class="k">${DEVICE_TYPES[n.type].emoji} ${n.name}</span><span class="v muted">${DEVICE_TYPES[n.type].label}</span></div>`).join('')
+        : `<div class="prop-row"><span class="k muted">Not connected yet</span><span class="v"></span></div>`
+    }
+
+    ${renderTestToolsSection(node)}
+
+    <div style="margin-top:18px; display:flex; gap:8px;">
+      <button class="btn" id="cfg-connect">🔗 Connect from here</button>
+      <button class="btn danger" id="cfg-del">🗑 Delete</button>
+    </div>
+  `;
+
+  // Rename handler (live updates the canvas label).
+  const nameInput = document.getElementById('cfg-name');
+  nameInput.addEventListener('input', () => {
+    node.name = nameInput.value || node.name;
+    draw();
+  });
+
+  // Wire up addressing + service + test-tool buttons (they may not all exist).
+  wireAddressingHandlers(node);
+  wireServiceHandlers(node);
+  wireTestToolHandlers(node);
+
+  // Quick "connect from here" starts connect mode pre-seeded with this node.
+  document.getElementById('cfg-connect').addEventListener('click', () => {
+    setMode('connect');
+    SIM.connectFrom = node.id;
+    logMsg(`Connect: now click another device to link with ${node.name}.`, 'info');
+    draw();
+  });
+
+  // Delete this node.
+  document.getElementById('cfg-del').addEventListener('click', () => deleteNode(node.id));
+}
+
+/* ----------------------------------------------------------------------------
+   Config-panel sub-sections (Phase 2): addressing + test tools.
+   Split into small functions so later phases can add more sections cleanly.
+   ---------------------------------------------------------------------------- */
+
+/** Addressing section markup — differs by device type. */
+function renderAddressingSection(node) {
+  const c = node.config || {};
+
+  // Router: show LAN gateway IP, WAN IP, and a DHCP toggle + pool info.
+  if (node.type === 'router') {
+    const leaseCount = Object.keys(SIM.leases).length;
+    return `
+      <div class="section-title">Addressing — Gateway</div>
+      <div class="prop-row"><span class="k">LAN IP (gateway)</span><span class="v">${c.ip || '—'}</span></div>
+      <div class="prop-row"><span class="k">Subnet mask</span><span class="v">${NETWORK.mask}</span></div>
+      <div class="prop-row"><span class="k">WAN IP (public)</span><span class="v">${c.wanIp || '—'}</span></div>
+
+      <div class="section-title">DHCP Server</div>
+      <div class="field" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <input type="checkbox" id="cfg-dhcp" ${c.dhcp ? 'checked' : ''} style="width:auto;" />
+        <label for="cfg-dhcp" style="margin:0;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);">Enable DHCP server</label>
+      </div>
+      <div class="prop-row"><span class="k">Pool</span><span class="v">${NETWORK.lanPrefix}${NETWORK.dhcpStart}–${NETWORK.dhcpEnd}</span></div>
+      <div class="prop-row"><span class="k">Active leases</span><span class="v">${leaseCount}</span></div>
+
+      ${renderFirewallSection(node)}
+    `;
+  }
+
+  // PC / Server: show current IP config + a "Request IP (DHCP)" button.
+  if (node.type === 'pc' || node.type === 'server') {
+    return `
+      <div class="section-title">Addressing</div>
+      <div class="prop-row"><span class="k">IP address</span><span class="v ${c.ip ? '' : 'muted'}">${c.ip || 'unassigned'}</span></div>
+      <div class="prop-row"><span class="k">Gateway</span><span class="v ${c.gateway ? '' : 'muted'}">${c.gateway || '—'}</span></div>
+      <div class="prop-row"><span class="k">DNS server</span><span class="v ${c.dns ? '' : 'muted'}">${c.dns || '—'}</span></div>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <button class="btn" id="cfg-dhcp-req">📥 Request IP (DHCP)</button>
+        ${c.ip ? `<button class="btn ghost" id="cfg-dhcp-rel">Release</button>` : ''}
+      </div>
+    `;
+  }
+
+  // Switch / WAN: no addressing.
+  return '';
+}
+
+/** Wire up handlers created by renderAddressingSection(). */
+function wireAddressingHandlers(node) {
+  const dhcpToggle = document.getElementById('cfg-dhcp');
+  if (dhcpToggle) {
+    dhcpToggle.addEventListener('change', () => {
+      node.config.dhcp = dhcpToggle.checked;
+      logMsg(`DHCP server on ${node.name} ${node.config.dhcp ? 'enabled' : 'disabled'}.`,
+             node.config.dhcp ? 'secure' : 'warning');
+      refreshUI();
+    });
+  }
+  const reqBtn = document.getElementById('cfg-dhcp-req');
+  if (reqBtn) reqBtn.addEventListener('click', () => dhcpRequest(node));
+
+  const relBtn = document.getElementById('cfg-dhcp-rel');
+  if (relBtn) relBtn.addEventListener('click', () => {
+    dhcpRelease(node.id);
+    node.config.ip = node.config.gateway = node.config.dns = null;
+    logMsg(`${node.name} released its DHCP lease.`, 'warning');
+    refreshUI();
+  });
+
+  // Firewall handlers (routers only).
+  wireFirewallHandlers(node);
+}
+
+/* ----------------------------------------------------------------------------
+   Firewall section (Phase 5) — routers only. An ordered rule list plus a
+   default action. Rules match on destination IP + port.
+   ---------------------------------------------------------------------------- */
+function renderFirewallSection(node) {
+  const fw = node.config.firewall;
+  if (!fw) return '';
+
+  const ruleRows = fw.rules.map((r, i) => `
+    <div class="fw-rule" data-idx="${i}">
+      <select data-f="action">
+        <option value="allow" ${r.action === 'allow' ? 'selected' : ''}>ALLOW</option>
+        <option value="block" ${r.action === 'block' ? 'selected' : ''}>BLOCK</option>
+      </select>
+      <input type="text" data-f="ip"   value="${escapeAttr(r.ip)}"   placeholder="any / IP" />
+      <input type="text" data-f="port" value="${escapeAttr(String(r.port))}" placeholder="any / port" />
+      <button class="del" data-fwdel="${i}" title="Delete rule">×</button>
+    </div>`).join('');
+
+  return `
+    <div class="section-title">Firewall</div>
+    <div class="field" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <input type="checkbox" id="fw-enabled" ${fw.enabled ? 'checked' : ''} style="width:auto;" />
+      <label for="fw-enabled" style="margin:0;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);">Enable firewall</label>
+    </div>
+    <div class="mini-note">Rules run top-to-bottom; first match wins. Use <span class="kbd">any</span> to match all IPs/ports (e.g. block port 80).</div>
+    <div id="fw-rules">${ruleRows || '<div class="mini-note">No rules — using default action.</div>'}</div>
+    <div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px;">
+      <button class="btn" id="fw-add">＋ Add rule</button>
+      <span style="flex:1"></span>
+      <label style="font-size:12px;color:var(--text-muted);">Default</label>
+      <select id="fw-default" style="width:auto;padding:5px 8px;">
+        <option value="allow" ${fw.defaultAction === 'allow' ? 'selected' : ''}>ALLOW</option>
+        <option value="block" ${fw.defaultAction === 'block' ? 'selected' : ''}>BLOCK</option>
+      </select>
+    </div>
+  `;
+}
+
+/** Wire up firewall editor controls. */
+function wireFirewallHandlers(node) {
+  const fw = node.config.firewall;
+  if (!fw) return;
+
+  const en = document.getElementById('fw-enabled');
+  if (en) en.addEventListener('change', () => {
+    fw.enabled = en.checked;
+    logMsg(`Firewall on ${node.name} ${fw.enabled ? 'enabled' : 'disabled'}.`, fw.enabled ? 'secure' : 'warning');
+    refreshUI();
+  });
+
+  const def = document.getElementById('fw-default');
+  if (def) def.addEventListener('change', () => {
+    fw.defaultAction = def.value;
+    logMsg(`Firewall default action set to ${def.value.toUpperCase()}.`, def.value === 'block' ? 'warning' : 'info');
+  });
+
+  const add = document.getElementById('fw-add');
+  if (add) add.addEventListener('click', () => {
+    fw.rules.push({ action: 'block', dir: 'any', ip: 'any', port: 'any' });
+    refreshUI();
+  });
+
+  document.querySelectorAll('#fw-rules .fw-rule').forEach(row => {
+    const idx = Number(row.dataset.idx);
+    row.querySelectorAll('[data-f]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        let v = inp.value.trim();
+        const field = inp.dataset.f;
+        if (field === 'port' && v !== 'any' && v !== '') v = v; // keep as string; matched loosely
+        fw.rules[idx][field] = v || 'any';
+      });
+    });
+    const del = row.querySelector('[data-fwdel]');
+    if (del) del.addEventListener('click', () => {
+      fw.rules.splice(idx, 1);
+      refreshUI();
+    });
+  });
+}
+
+/* ----------------------------------------------------------------------------
+   Services section (Phase 3) — only for servers. Lets students toggle each
+   service on/off and, for Web/DNS, edit the hosted content / records.
+   ---------------------------------------------------------------------------- */
+function renderServicesSection(node) {
+  if (node.type !== 'server') return '';
+  if (!node.config.ip) {
+    return `
+      <div class="section-title">Services</div>
+      <div class="mini-note">Assign an IP (Request DHCP above) before enabling services,
+      so clients can reach them.</div>`;
+  }
+
+  // Build the on/off rows for each service.
+  const rows = Object.keys(SERVICE_DEFS).map(key => {
+    const def = SERVICE_DEFS[key];
+    const on = node.services[key] && node.services[key].enabled;
+    return `
+      <div class="svc-row ${on ? 'on' : ''}">
+        <span class="svc-emoji">${def.emoji}</span>
+        <div class="svc-meta">
+          <div class="svc-name">${def.label}</div>
+          <div class="svc-ports">${def.proto} · port ${def.ports.join(', ')}</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-svc="${key}" ${on ? 'checked' : ''} />
+          <span class="slider"></span>
+        </label>
+      </div>`;
+  }).join('');
+
+  // DNS editor (only meaningful when DNS is enabled).
+  const dnsEditor = node.services.dns.enabled ? renderDnsEditor(node) : '';
+
+  // Web editor (only when web is enabled).
+  const webEditor = node.services.web.enabled ? renderWebEditor(node) : '';
+
+  return `
+    <div class="section-title">Services</div>
+    ${rows}
+    ${dnsEditor}
+    ${webEditor}
+  `;
+}
+
+/** DNS zone editor markup: list of A/CNAME records + add button. */
+function renderDnsEditor(node) {
+  const recs = node.services.dns.records || [];
+  const rows = recs.map((r, i) => `
+    <div class="dns-rec" data-idx="${i}">
+      <select data-f="type">
+        <option value="A"     ${r.type === 'A' ? 'selected' : ''}>A</option>
+        <option value="CNAME" ${r.type === 'CNAME' ? 'selected' : ''}>CNAME</option>
+      </select>
+      <input type="text" data-f="name"  value="${escapeAttr(r.name)}"  placeholder="www.site.local" />
+      <input type="text" data-f="value" value="${escapeAttr(r.value)}" placeholder="${r.type === 'CNAME' ? 'target.domain' : '192.168.1.101'}" />
+      <button class="del" data-del="${i}" title="Delete record">×</button>
+    </div>`).join('');
+
+  return `
+    <div class="section-title" style="margin-top:14px">DNS Zone Records</div>
+    <div class="mini-note">Map domain names to IPs (A) or to other names (CNAME).</div>
+    <div id="dns-records">${rows || '<div class="mini-note">No records yet.</div>'}</div>
+    <button class="btn" id="dns-add" style="margin-top:4px">＋ Add record</button>
+  `;
+}
+
+/** Web content editor markup + SSL/TLS certificate module. */
+function renderWebEditor(node) {
+  const web = node.services.web;
+  const cert = web.cert;
+
+  // Certificate status block.
+  let certBlock;
+  if (!cert) {
+    certBlock = `<div class="cert-box none">🔓 No TLS certificate — HTTPS unavailable. HTTP traffic is unencrypted.</div>`;
+  } else {
+    const now = Date.now();
+    const expired = now > cert.expires;
+    const cls = expired ? 'bad' : (cert.selfSigned ? 'warn' : 'good');
+    const icon = expired ? '⚠️' : (cert.selfSigned ? '⚠️' : '🔒');
+    certBlock = `
+      <div class="cert-box ${cls}">
+        <div>${icon} <b>${escapeHtml(cert.domain)}</b></div>
+        <div class="cert-meta">Issuer: ${escapeHtml(cert.issuer)}</div>
+        <div class="cert-meta">Issued: ${new Date(cert.issued).toLocaleDateString()}</div>
+        <div class="cert-meta">Expires: ${new Date(cert.expires).toLocaleDateString()} ${expired ? '(EXPIRED)' : ''}</div>
+      </div>`;
+  }
+
+  return `
+    <div class="section-title" style="margin-top:14px">Web Page Content</div>
+    <div class="mini-note">Simulated HTML served on ports 80/443. Rendered by <span class="kbd">curl</span> / browser.</div>
+    <div class="field" style="margin-bottom:6px">
+      <textarea id="web-html" rows="5" style="font-family:var(--mono);font-size:12px;">${escapeHtml(web.html || '')}</textarea>
+    </div>
+
+    <div class="section-title" style="margin-top:14px">SSL / TLS Certificate</div>
+    ${certBlock}
+    <div class="field" style="margin:8px 0 6px">
+      <label for="cert-domain">Certificate domain</label>
+      <input type="text" id="cert-domain" value="${escapeAttr(cert ? cert.domain : '')}" placeholder="www.myschool.local" />
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      <button class="btn primary" id="cert-issue">🔒 Generate certificate (Let's Encrypt)</button>
+      ${cert ? `<button class="btn ghost" id="cert-revoke">Revoke</button>` : ''}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+      <button class="btn" id="cert-selfsigned" title="Issue a self-signed cert (browsers will warn)">Self-signed</button>
+      <button class="btn" id="cert-expired" title="Issue an already-expired cert (for testing)">Expired (demo)</button>
+    </div>
+    <div class="field" style="display:flex;align-items:center;gap:8px;margin:12px 0 0;">
+      <input type="checkbox" id="web-forcehttps" ${web.forceHttps ? 'checked' : ''} style="width:auto;" />
+      <label for="web-forcehttps" style="margin:0;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);">Force HTTPS (refuse plain HTTP)</label>
+    </div>
+  `;
+}
+
+/** Wire up all service-section handlers (toggles, DNS records, web editor). */
+function wireServiceHandlers(node) {
+  if (node.type !== 'server') return;
+
+  // Service on/off toggles.
+  document.querySelectorAll('[data-svc]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const key = cb.dataset.svc;
+      node.services[key].enabled = cb.checked;
+      const def = SERVICE_DEFS[key];
+      logMsg(`${node.name}: ${def.label} ${cb.checked ? 'started' : 'stopped'} (port ${def.ports.join('/')}).`,
+             cb.checked ? 'secure' : 'warning');
+      if (key === 'dns') syncDnsPointer(); // clients should learn the DNS IP
+      refreshUI();
+    });
+  });
+
+  // DNS: add record.
+  const addBtn = document.getElementById('dns-add');
+  if (addBtn) addBtn.addEventListener('click', () => {
+    node.services.dns.records.push({ type: 'A', name: '', value: '' });
+    refreshUI();
+  });
+
+  // DNS: edit / delete records.
+  document.querySelectorAll('#dns-records .dns-rec').forEach(row => {
+    const idx = Number(row.dataset.idx);
+    row.querySelectorAll('[data-f]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const field = inp.dataset.f;
+        node.services.dns.records[idx][field] = inp.value.trim();
+        // Re-render only on type change (to update placeholder); text edits are live.
+        if (field === 'type') refreshUI();
+      });
+    });
+    const del = row.querySelector('[data-del]');
+    if (del) del.addEventListener('click', () => {
+      node.services.dns.records.splice(idx, 1);
+      logMsg(`${node.name}: DNS record removed.`, 'warning');
+      refreshUI();
+    });
+  });
+
+  // Web: edit hosted HTML.
+  const webArea = document.getElementById('web-html');
+  if (webArea) webArea.addEventListener('input', () => {
+    node.services.web.html = webArea.value;
+  });
+
+  // SSL / TLS certificate controls.
+  const domainInput = document.getElementById('cert-domain');
+  const getDomain = () => (domainInput && domainInput.value.trim()) || '';
+
+  const issueBtn = document.getElementById('cert-issue');
+  if (issueBtn) issueBtn.addEventListener('click', () => {
+    const d = getDomain();
+    if (!d) { logMsg('Enter a certificate domain first (e.g. www.myschool.local).', 'warning'); return; }
+    const cert = issueCertificate(node, d, {});
+    logMsg(`SSL: issued certificate for ${d} (valid ${SECURITY.certDays} days, by ${cert.issuer}).`, 'secure');
+    refreshUI();
+  });
+
+  const selfBtn = document.getElementById('cert-selfsigned');
+  if (selfBtn) selfBtn.addEventListener('click', () => {
+    const d = getDomain();
+    if (!d) { logMsg('Enter a certificate domain first.', 'warning'); return; }
+    issueCertificate(node, d, { selfSigned: true });
+    logMsg(`SSL: issued SELF-SIGNED certificate for ${d} (browsers will warn).`, 'warning');
+    refreshUI();
+  });
+
+  const expBtn = document.getElementById('cert-expired');
+  if (expBtn) expBtn.addEventListener('click', () => {
+    const d = getDomain();
+    if (!d) { logMsg('Enter a certificate domain first.', 'warning'); return; }
+    issueCertificate(node, d, { expired: true });
+    logMsg(`SSL: issued an EXPIRED certificate for ${d} (for testing).`, 'warning');
+    refreshUI();
+  });
+
+  const revokeBtn = document.getElementById('cert-revoke');
+  if (revokeBtn) revokeBtn.addEventListener('click', () => {
+    node.services.web.cert = null;
+    logMsg(`SSL: certificate revoked on ${node.name}.`, 'danger');
+    refreshUI();
+  });
+
+  const forceHttps = document.getElementById('web-forcehttps');
+  if (forceHttps) forceHttps.addEventListener('change', () => {
+    node.services.web.forceHttps = forceHttps.checked;
+    logMsg(`${node.name}: Force-HTTPS ${forceHttps.checked ? 'enabled' : 'disabled'}.`,
+           forceHttps.checked ? 'secure' : 'warning');
+  });
+}
+
+/** Test-tools section: a simple "send test packet" for PCs (full terminal in Phase 4). */
+function renderTestToolsSection(node) {
+  if (node.type !== 'pc' && node.type !== 'server') return '';
+
+  // Build a dropdown of possible destinations (all other addressable nodes).
+  const targets = SIM.nodes.filter(n => n.id !== node.id && (n.type === 'server' || n.type === 'pc' || n.type === 'router'));
+  const options = targets.length
+    ? targets.map(t => `<option value="${t.id}">${t.name}${t.config.ip ? ' (' + t.config.ip + ')' : ''}</option>`).join('')
+    : `<option value="">— no other devices —</option>`;
+
+  // PCs get a full Terminal/Browser; both PCs and servers keep quick tools.
+  const terminalBtn = node.type === 'pc'
+    ? `<button class="btn primary" id="cfg-terminal" style="width:100%;margin-bottom:12px">🖥 Open Terminal / Browser</button>`
+    : '';
+
+  return `
+    <div class="section-title">Test Tools</div>
+    ${terminalBtn}
+    <div class="field">
+      <label for="cfg-target">Send a test packet to</label>
+      <select id="cfg-target" ${targets.length ? '' : 'disabled'}>${options}</select>
+    </div>
+    <button class="btn" id="cfg-send" ${targets.length ? '' : 'disabled'}>▶ Send test packet</button>
+
+    <div class="field" style="margin-top:12px">
+      <label for="cfg-lookup">Resolve a domain (nslookup)</label>
+      <input type="text" id="cfg-lookup" placeholder="www.myschool.local" />
+    </div>
+    <button class="btn" id="cfg-resolve">🧭 Resolve</button>
+  `;
+}
+
+/** Wire up the "send test packet" button. */
+function wireTestToolHandlers(node) {
+  // Open the Terminal/Browser modal (PCs only).
+  const termBtn = document.getElementById('cfg-terminal');
+  if (termBtn) termBtn.addEventListener('click', () => openTerminal(node));
+
+  const sendBtn = document.getElementById('cfg-send');
+  const targetSel = document.getElementById('cfg-target');
+  if (!sendBtn || !targetSel) return;
+  sendBtn.addEventListener('click', () => {
+    const dstId = targetSel.value;
+    if (!dstId) return;
+    const dst = getNode(dstId);
+    const path = findPath(node.id, dstId);
+    if (!path) {
+      logMsg(`No route from ${node.name} to ${dst.name}. Check your connections.`, 'danger');
+      return;
+    }
+    logMsg(`${node.name} → ${dst.name}: sending test packet along ${path.length - 1} hop(s)…`, 'info');
+    animateRoundTrip(node.id, dstId, 'request', (ok) => {
+      if (ok) logMsg(`${node.name} → ${dst.name}: reply received. Route OK.`, 'secure');
+    });
+  });
+
+  // nslookup-style resolver: query the DNS server and report the result.
+  const resolveBtn = document.getElementById('cfg-resolve');
+  const lookupInp  = document.getElementById('cfg-lookup');
+  if (resolveBtn && lookupInp) resolveBtn.addEventListener('click', () => {
+    const domain = (lookupInp.value || '').trim();
+    if (!domain) { logMsg('Enter a domain name to resolve.', 'warning'); return; }
+
+    const dnsSrv = findDnsServer();
+    if (!dnsSrv) { logMsg(`nslookup ${domain}: no DNS server running on the network.`, 'danger'); return; }
+
+    // Client must be able to reach the DNS server physically.
+    const path = findPath(node.id, dnsSrv.id);
+    if (!path) { logMsg(`nslookup ${domain}: cannot reach DNS server ${dnsSrv.name}.`, 'danger'); return; }
+
+    logMsg(`${node.name}: querying DNS ${dnsSrv.config.ip} for ${domain}…`, 'info');
+    animateRoundTrip(node.id, dnsSrv.id, 'request', () => {
+      const res = resolveDomain(domain);
+      if (res.ip) {
+        res.chain.forEach(step => logMsg('  ' + step, ''));
+        logMsg(`nslookup ${domain} → ${res.ip}`, 'secure');
+      } else {
+        logMsg(`nslookup ${domain}: ${res.error}`, 'danger');
+      }
+    });
+  });
+}
+
+/** Escape a string for safe use inside an HTML attribute (value="…"). */
+function escapeAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/** Escape a string for safe use inside element text / a <textarea>. */
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+
+/* ============================================================================
+   9b. TERMINAL / BROWSER  (Phase 4)
+   ============================================================================
+   A per-PC command line + simple browser. Commands drive REAL simulation logic
+   (DNS resolution, BFS routing, packet animations, hitting web services) so the
+   output reflects the student's actual topology and configuration.
+
+   Supported commands:
+     help                       list commands
+     ipconfig                   show this PC's IP / gateway / DNS
+     ping <ip|domain>           ICMP-style reachability test (animated)
+     nslookup <domain>          resolve a name via the DNS server (animated)
+     curl <http(s)://domain>    fetch a web page (animated); renders in Browser
+     clear                      clear the terminal
+   ========================================================================== */
+
+// Module state: which PC owns the currently-open terminal.
+const TERM = {
+  node: null,                 // the PC node
+  history: [],                // command history
+  histIdx: -1,                // history navigation cursor
+  lastPage: null,             // { url, secure, html, status } for the Browser tab
+};
+
+const termModal   = document.getElementById('terminalModal');
+const termOut     = document.getElementById('termOut');
+const termInput   = document.getElementById('termInput');
+const termPrompt  = document.getElementById('termPrompt');
+const termTitle   = document.getElementById('termTitle');
+// Pen-test modal element (declared here so the event wiring below — which runs
+// at load — can reference it before section 9c's functions are defined).
+const pentestModal = document.getElementById('pentestModal');
+
+/** Open the terminal modal bound to a given PC node. */
+function openTerminal(node) {
+  TERM.node = node;
+  TERM.history = []; TERM.histIdx = -1;
+  termTitle.textContent = `💻 ${node.name} — Terminal`;
+  termPrompt.textContent = `${node.name.toLowerCase()}$`;
+  termOut.innerHTML = '';
+  switchModalTab('terminal');
+  termModal.classList.remove('hidden');
+
+  // Welcome banner.
+  termPrint(`Network Simulator shell — ${node.name}`, 't-muted');
+  termPrint(`Type 'help' for a list of commands.`, 't-muted');
+  if (!node.config.ip) termPrint(`Note: this PC has no IP yet. Run DHCP from its config panel.`, 't-warn');
+  setTimeout(() => termInput.focus(), 30);
+}
+
+/** Close the terminal modal. */
+function closeTerminal() {
+  termModal.classList.add('hidden');
+  TERM.node = null;
+}
+
+/** Print a line to the terminal output. `cls` selects a colour class. */
+function termPrint(text, cls = '') {
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  div.textContent = text;
+  termOut.appendChild(div);
+  termOut.scrollTop = termOut.scrollHeight;
+}
+
+/** Switch between Terminal and Browser tabs in the modal. */
+function switchModalTab(tab) {
+  document.querySelectorAll('.modal-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.tab === tab));
+  document.getElementById('termView').classList.toggle('hidden', tab !== 'terminal');
+  document.getElementById('browserView').classList.toggle('hidden', tab !== 'browser');
+  if (tab === 'terminal') setTimeout(() => termInput.focus(), 20);
+}
+
+/* ---- Command parsing ------------------------------------------------------ */
+
+/** Handle a command line entered in the terminal. */
+function runCommand(raw) {
+  const line = raw.trim();
+  const node = TERM.node;
+  termPrint(`${node.name.toLowerCase()}$ ${line}`, 't-cmd');
+  if (!line) return;
+
+  TERM.history.push(line); TERM.histIdx = TERM.history.length;
+
+  const parts = line.split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+  const arg = parts[1] || '';
+
+  switch (cmd) {
+    case 'help':     cmdHelp(); break;
+    case 'ipconfig':
+    case 'ifconfig': cmdIpconfig(node); break;
+    case 'ping':     cmdPing(node, arg); break;
+    case 'nslookup':
+    case 'dig':      cmdNslookup(node, arg); break;
+    case 'curl':     cmdCurl(node, arg); break;
+    case 'clear':
+    case 'cls':      termOut.innerHTML = ''; break;
+    default:
+      termPrint(`command not found: ${cmd}. Type 'help'.`, 't-err');
+  }
+}
+
+function cmdHelp() {
+  termPrint('Available commands:');
+  termPrint('  help                       show this help', 't-muted');
+  termPrint('  ipconfig                   show IP / gateway / DNS', 't-muted');
+  termPrint('  ping <ip|domain>           test reachability (animated)', 't-muted');
+  termPrint('  nslookup <domain>          resolve a name via DNS', 't-muted');
+  termPrint('  curl <http(s)://domain>    fetch a web page', 't-muted');
+  termPrint('  clear                      clear the screen', 't-muted');
+}
+
+function cmdIpconfig(node) {
+  const c = node.config;
+  if (!c.ip) { termPrint('No IP address. Request a DHCP lease from the config panel.', 't-warn'); return; }
+  termPrint(`IPv4 Address . . . . : ${c.ip}`);
+  termPrint(`Subnet Mask  . . . . : ${NETWORK.mask}`);
+  termPrint(`Default Gateway  . . : ${c.gateway || '—'}`);
+  termPrint(`DNS Server . . . . . : ${c.dns || '—'}`);
+}
+
+/**
+ * ping: works with either an IP or a domain. If given a domain, it first
+ * resolves via DNS (silently), then pings the resulting IP by animating a
+ * round trip to that host if a route exists.
+ */
+function cmdPing(node, target) {
+  if (!target) { termPrint('usage: ping <ip|domain>', 't-warn'); return; }
+  if (!node.config.ip) { termPrint('ping: no local IP. Run DHCP first.', 't-err'); return; }
+
+  // Resolve domain → IP if necessary.
+  let ip = target;
+  if (!isIpAddress(target)) {
+    const res = resolveDomain(target);
+    if (!res.ip) { termPrint(`ping: cannot resolve ${target}: ${res.error}`, 't-err'); return; }
+    ip = res.ip;
+    termPrint(`Pinging ${target} [${ip}] with 32 bytes of data:`);
+  } else {
+    termPrint(`Pinging ${ip} with 32 bytes of data:`);
+  }
+
+  // Find the host with that IP and a route to it.
+  const host = findServerByIp(ip) || SIM.nodes.find(n => n.config && n.config.ip === ip);
+  if (!host) { termPrint(`Request timed out (no host has ${ip}).`, 't-err'); return; }
+  const path = findPath(node.id, host.id);
+  if (!path) { termPrint(`Request timed out (no route to ${ip}).`, 't-err'); return; }
+
+  // Animate the echo request/reply, then print latency lines.
+  animateRoundTrip(node.id, host.id, 'request', (ok) => {
+    if (!ok) { termPrint('Request timed out.', 't-err'); return; }
+    const hops = path.length - 1;
+    for (let i = 0; i < 4; i++) {
+      const ms = 2 + hops * 2 + Math.round(Math.random() * 6);
+      termPrint(`Reply from ${ip}: bytes=32 time=${ms}ms TTL=${64 - hops}`, 't-ok');
+    }
+    termPrint(`Ping statistics for ${ip}: 4 sent, 4 received, 0% loss.`, 't-ok');
+  });
+  termPrint('...', 't-muted');
+}
+
+/** nslookup: resolve a domain via the DNS server (animated query). */
+function cmdNslookup(node, domain) {
+  if (!domain) { termPrint('usage: nslookup <domain>', 't-warn'); return; }
+  const dns = findDnsServer();
+  if (!dns) { termPrint('nslookup: no DNS server on the network.', 't-err'); return; }
+  if (!node.config.ip) { termPrint('nslookup: no local IP. Run DHCP first.', 't-err'); return; }
+
+  const path = findPath(node.id, dns.id);
+  if (!path) { termPrint(`nslookup: can't reach DNS server ${dns.config.ip}.`, 't-err'); return; }
+
+  termPrint(`Server:  ${dns.name}`, 't-muted');
+  termPrint(`Address: ${dns.config.ip}#53`, 't-muted');
+  animateRoundTrip(node.id, dns.id, 'request', () => {
+    const res = resolveDomain(domain);
+    if (res.ip) {
+      res.chain.forEach(step => termPrint('  ' + step, 't-muted'));
+      termPrint(`Name:    ${domain}`, 't-ok');
+      termPrint(`Address: ${res.ip}`, 't-ok');
+    } else {
+      termPrint(`** server can't find ${domain}: ${res.error}`, 't-err');
+    }
+  });
+}
+
+/**
+ * curl: fetch a web page. Steps mirror a real request:
+ *   1. parse the URL (scheme + host)
+ *   2. resolve the host via DNS (unless it's already an IP)
+ *   3. find a route to the web server
+ *   4. check the web service is enabled on the right port (80 vs 443)
+ *   5. animate the request/response, print headers + body, and stash the page
+ *      for the Browser tab.
+ * (SSL/cert validation + MITM visualisation are layered on in Phase 5.)
+ */
+function cmdCurl(node, url) {
+  if (!url) { termPrint('usage: curl <http://domain | https://domain>', 't-warn'); return; }
+  if (!node.config.ip) { termPrint('curl: no local IP. Run DHCP first.', 't-err'); return; }
+
+  const parsed = parseUrl(url);
+  if (!parsed) { termPrint(`curl: could not parse URL "${url}".`, 't-err'); return; }
+  const { scheme, host } = parsed;
+  const secure = scheme === 'https';
+  const port = secure ? 443 : 80;
+
+  // Resolve host → IP.
+  let ip = host;
+  if (!isIpAddress(host)) {
+    const res = resolveDomain(host);
+    if (!res.ip) { termPrint(`curl: could not resolve host: ${host} (${res.error})`, 't-err'); return; }
+    ip = res.ip;
+    termPrint(`* Resolved ${host} → ${ip}`, 't-muted');
+  }
+
+  // Find the server + route.
+  const server = findServerByIp(ip);
+  if (!server) { termPrint(`curl: no server has ${ip}. Connection refused.`, 't-err'); return; }
+  const path = findPath(node.id, server.id);
+  if (!path) { termPrint(`curl: no route to host ${ip}.`, 't-err'); return; }
+
+  // Is the web service running?
+  if (!hasService(server, 'web')) {
+    termPrint(`curl: connection refused on port ${port} (web service is off).`, 't-err');
+    return;
+  }
+
+  const web = server.services.web;
+
+  // HTTPS: validate the certificate before proceeding.
+  if (secure) {
+    const v = validateCertificate(server, host);
+    if (!v.valid) {
+      termPrint(`* TLS handshake: ${certReasonText(v.reason, v.cert, host)}`, 't-err');
+      termPrint(`curl: (60) SSL certificate problem — connection not secure.`, 't-err');
+      return;
+    }
+    termPrint(`* TLS: ${certReasonText('ok', v.cert, host)}`, 't-ok');
+  } else {
+    // Plain HTTP — warn about interception; blocked if server forces HTTPS.
+    if (web.forceHttps) {
+      termPrint(`* Server requires HTTPS (301). Retry with https://`, 't-warn');
+      return;
+    }
+    termPrint(`* WARNING: HTTP is unencrypted — data is readable if intercepted.`, 't-warn');
+  }
+
+  // MITM: is there an attacker on this LAN sniffing traffic?
+  const mitm = SIM.mitmActive === true;
+
+  termPrint(`* Connecting to ${ip}:${port}...`, 't-muted');
+  const sent = sendServiceRequest(node.id, server.id, {
+    dstIp: ip, port, secure,
+    payload: 'GET /',
+    intercept: mitm,
+    onBlocked: (rule, fwNode) => {
+      termPrint(`curl: connection refused — blocked by firewall on ${fwNode.name}.`, 't-err');
+      if (rule) termPrint(`       rule: ${describeRule(rule)}`, 't-muted');
+      logMsg(`Firewall on ${fwNode.name} dropped ${node.name}→${ip}:${port}.`, 'danger');
+    },
+    onDeliver: () => {
+      const body = web.html || '';
+      termPrint(`> ${secure ? 'GET / HTTP/1.1 (TLS)' : 'GET / HTTP/1.1'}`, 't-muted');
+      termPrint(`< HTTP/1.1 200 OK`, 't-ok');
+      termPrint(`< Server: SimHTTPD`, 't-muted');
+      termPrint(`< Content-Type: text/html`, 't-muted');
+      termPrint('');
+      body.split('\n').forEach(l => termPrint(l));
+      TERM.lastPage = { url: `${scheme}://${host}`, secure, html: body, status: '200 OK' };
+      termPrint('');
+      termPrint(`(Rendered page available in the Browser tab.)`, 't-muted');
+      if (mitm && !secure) {
+        termPrint(`* 🕵️  A man-in-the-middle could read this entire exchange.`, 't-err');
+        logMsg(`MITM: ${node.name}'s HTTP traffic to ${host} was readable in transit.`, 'danger');
+      } else if (mitm && secure) {
+        logMsg(`MITM: ${node.name}'s HTTPS traffic to ${host} stayed encrypted.`, 'secure');
+      }
+    },
+  });
+  if (!sent) termPrint(`curl: no route to host ${ip}.`, 't-err');
+}
+
+/* ---- Small parsing helpers ----------------------------------------------- */
+
+/** True if a string looks like a dotted-quad IPv4 address. */
+function isIpAddress(s) {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(s);
+}
+
+/** Parse a URL into { scheme, host }. Defaults scheme to http. */
+function parseUrl(url) {
+  let u = url.trim();
+  let scheme = 'http';
+  const m = u.match(/^(https?):\/\/(.+)$/i);
+  if (m) { scheme = m[1].toLowerCase(); u = m[2]; }
+  // Strip any path/query — this simulator serves a single page per server.
+  const host = u.split(/[\/?#]/)[0];
+  if (!host) return null;
+  return { scheme, host };
+}
+
+/* ---- Browser tab ---------------------------------------------------------- */
+
+/** Load a URL in the Browser tab (reuses curl logic for fetching). */
+function browserGo(url) {
+  const node = TERM.node;
+  const statusEl = document.getElementById('browserStatus');
+  const contentEl = document.getElementById('browserContent');
+  const lockEl = document.getElementById('browserLock');
+
+  const parsed = parseUrl(url);
+  if (!parsed) { browserError('Invalid URL'); return; }
+  const { scheme, host } = parsed;
+  const secure = scheme === 'https';
+  lockEl.textContent = secure ? '🔒' : '🌐';
+
+  if (!node.config.ip) { browserError('This PC has no IP address. Run DHCP first.'); return; }
+
+  // Resolve.
+  let ip = host;
+  if (!isIpAddress(host)) {
+    const res = resolveDomain(host);
+    if (!res.ip) { browserError(`Can’t resolve “${host}” — ${res.error}`); return; }
+    ip = res.ip;
+  }
+  const server = findServerByIp(ip);
+  if (!server) { browserError(`No server responds at ${ip}.`); return; }
+  const path = findPath(node.id, server.id);
+  if (!path) { browserError(`No route to ${ip}.`); return; }
+  if (!hasService(server, 'web')) { browserError(`Connection refused — web service is off on ${server.name}.`); return; }
+
+  const web = server.services.web;
+  const port = secure ? 443 : 80;
+
+  // HTTPS certificate validation (browsers show a warning page on failure).
+  if (secure) {
+    const v = validateCertificate(server, host);
+    if (!v.valid) {
+      lockEl.textContent = '⚠️';
+      browserError(`Your connection is not private — ${certReasonText(v.reason, v.cert, host)}`);
+      logMsg(`TLS warning for ${host}: ${v.reason}.`, 'warning');
+      return;
+    }
+    lockEl.textContent = '🔒';
+  } else if (web.forceHttps) {
+    browserError(`This server requires a secure (HTTPS) connection.`);
+    return;
+  }
+
+  const mitm = SIM.mitmActive === true;
+  statusEl.textContent = `Connecting to ${ip}:${port}…`;
+  const sent = sendServiceRequest(node.id, server.id, {
+    dstIp: ip, port, secure,
+    payload: 'GET /',
+    intercept: mitm,
+    onBlocked: (rule, fwNode) => {
+      browserError(`Connection blocked by firewall on ${fwNode.name}${rule ? ' (' + describeRule(rule) + ')' : ''}.`);
+      logMsg(`Firewall on ${fwNode.name} blocked browser request to ${host}:${port}.`, 'danger');
+    },
+    onDeliver: () => {
+      const html = web.html || '<p>(empty page)</p>';
+      contentEl.innerHTML = `<div class="rendered">${sanitizeForRender(html)}</div>`;
+      const lock = secure ? '🔒 Secure' : '🔓 Not secure';
+      statusEl.textContent = `200 OK · ${lock} · ${scheme}://${host} · ${server.name} (${ip})`;
+      TERM.lastPage = { url: `${scheme}://${host}`, secure, html, status: '200 OK' };
+      if (mitm && !secure) logMsg(`MITM: browser traffic to ${host} was sent in the clear.`, 'danger');
+    },
+  });
+  if (!sent) browserError(`No route to ${ip}.`);
+}
+
+/** Show an error page in the browser view. */
+function browserError(msg) {
+  document.getElementById('browserContent').innerHTML =
+    `<div class="browser-error"><div class="big">Unable to load page</div><div>${escapeHtml(msg)}</div></div>`;
+  document.getElementById('browserStatus').textContent = 'Error.';
+}
+
+/**
+ * Minimal HTML sanitiser for the simulated browser: strips <script> tags and
+ * inline event handlers so the rendered "page" can't execute real code. This is
+ * a teaching tool, not a security boundary — but it keeps the sandbox tidy.
+ */
+function sanitizeForRender(html) {
+  let out = String(html);
+  out = out.replace(/<\s*script[^>]*>[\s\S]*?<\s*\/\s*script\s*>/gi, '');
+  out = out.replace(/\son\w+\s*=\s*"[^"]*"/gi, '');
+  out = out.replace(/\son\w+\s*=\s*'[^']*'/gi, '');
+  out = out.replace(/javascript:/gi, '');
+  return out;
+}
+
+/* ---- Terminal / modal event wiring --------------------------------------- */
+
+// Submit a command on Enter; navigate history with arrow keys.
+termInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const val = termInput.value;
+    termInput.value = '';
+    runCommand(val);
+  } else if (e.key === 'ArrowUp') {
+    if (TERM.histIdx > 0) { TERM.histIdx--; termInput.value = TERM.history[TERM.histIdx] || ''; }
+    e.preventDefault();
+  } else if (e.key === 'ArrowDown') {
+    if (TERM.histIdx < TERM.history.length - 1) { TERM.histIdx++; termInput.value = TERM.history[TERM.histIdx] || ''; }
+    else { TERM.histIdx = TERM.history.length; termInput.value = ''; }
+    e.preventDefault();
+  }
+});
+
+// Modal tab switching + close.
+document.querySelectorAll('.modal-tab').forEach(t =>
+  t.addEventListener('click', () => switchModalTab(t.dataset.tab)));
+document.getElementById('termClose').addEventListener('click', closeTerminal);
+termModal.addEventListener('mousedown', (e) => { if (e.target === termModal) closeTerminal(); });
+
+// Browser go button + Enter in the URL bar.
+document.getElementById('browserGo').addEventListener('click', () =>
+  browserGo(document.getElementById('browserUrl').value));
+document.getElementById('browserUrl').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') browserGo(e.target.value);
+});
+
+// Pen-test modal wiring (Phase 6).
+document.getElementById('tool-pentest').addEventListener('click', () => { openPentest(); renderPentest(); });
+document.getElementById('pentestRun').addEventListener('click', renderPentest);
+document.getElementById('pentestClose').addEventListener('click', closePentest);
+pentestModal.addEventListener('mousedown', (e) => { if (e.target === pentestModal) closePentest(); });
+
+
+/* ============================================================================
+   9c. PEN-TEST MODE  (Phase 6)
+   ============================================================================
+   An automated security assessment that inspects the current topology + config
+   and reports findings. Each finding has a severity, a plain-English
+   explanation of the risk, and a remediation hint — designed to teach the "why",
+   not just the "what". Some findings offer an animated demo of the attack.
+
+   The CHECKS array below is fully educator-editable: add, remove, or reword
+   checks freely. Each check is a function receiving a `ctx` describing the
+   network and returning either null (nothing to report / passed silently) or a
+   finding object:
+     {
+       severity : 'critical'|'high'|'medium'|'low'|'pass',
+       category : short tag e.g. 'MITM',
+       title    : headline,
+       body     : explanation of the risk,
+       fix      : remediation advice,
+       demo     : optional () => void  (plays an animation / logs)
+     }
+   ========================================================================== */
+
+/** Severity ranking used for sorting + scoring. */
+const SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1, pass: 0 };
+
+/**
+ * Build a snapshot of the network for the checks to reason about. Gathering
+ * this once keeps each check simple and fast.
+ */
+function buildPentestContext() {
+  const nodes = SIM.nodes;
+  const routers = nodes.filter(n => n.type === 'router');
+  const servers = nodes.filter(n => n.type === 'server');
+  const pcs = nodes.filter(n => n.type === 'pc');
+  const webServers  = servers.filter(s => hasService(s, 'web'));
+  const dnsServers  = servers.filter(s => hasService(s, 'dns'));
+  const mailServers = servers.filter(s => hasService(s, 'mail'));
+  const fileServers = servers.filter(s => hasService(s, 'file'));
+  return { nodes, routers, servers, pcs, webServers, dnsServers, mailServers, fileServers };
+}
+
+/* ----------------------------------------------------------------------------
+   THE CHECKS  —  each returns a finding object or null.
+   ---------------------------------------------------------------------------- */
+const CHECKS = [
+
+  // 1. Unencrypted web (HTTP) with no certificate ---------------------------
+  function checkUnencryptedWeb(c) {
+    const offenders = c.webServers.filter(s => !s.services.web.cert && !s.services.web.forceHttps);
+    if (!offenders.length) return null;
+    return {
+      severity: 'high',
+      category: 'Unsecured Protocol',
+      title: 'Web traffic is served over plain HTTP',
+      body: `${offenders.map(s => s.name).join(', ')} host a website with no TLS certificate. ` +
+            `Data (including login credentials) travels in clear text on port 80 and can be read or altered by anyone on the path.`,
+      fix: 'Generate a TLS certificate (Let\'s Encrypt) for the site and enable "Force HTTPS".',
+      demo: () => { SIM.mitmActive = true; btnMitm.classList.add('active'); draw();
+                    logMsg('Pen-Test: MITM enabled — try curling the HTTP site to see the exposure.', 'danger'); },
+    };
+  },
+
+  // 2. Missing certificate on a site that forces HTTPS ----------------------
+  function checkForceHttpsNoCert(c) {
+    const offenders = c.webServers.filter(s => s.services.web.forceHttps && !s.services.web.cert);
+    if (!offenders.length) return null;
+    return {
+      severity: 'high',
+      category: 'Certificates',
+      title: 'HTTPS is enforced but no certificate is installed',
+      body: `${offenders.map(s => s.name).join(', ')} require HTTPS yet have no TLS certificate, so the site cannot be reached securely at all.`,
+      fix: 'Issue a valid certificate for the site\'s domain.',
+    };
+  },
+
+  // 3. Expired / self-signed certificates -----------------------------------
+  function checkBadCerts(c) {
+    const now = Date.now();
+    const bad = [];
+    c.webServers.forEach(s => {
+      const cert = s.services.web.cert;
+      if (!cert) return;
+      if (now > cert.expires) bad.push(`${s.name} (expired)`);
+      else if (cert.selfSigned) bad.push(`${s.name} (self-signed)`);
+    });
+    if (!bad.length) return null;
+    return {
+      severity: 'high',
+      category: 'Certificates',
+      title: 'Invalid TLS certificate in use',
+      body: `Problem certificates: ${bad.join(', ')}. Browsers show scary warnings and users may be trained to "click through" them — or the site simply won\'t load securely.`,
+      fix: 'Re-issue a current certificate from a trusted CA (Let\'s Encrypt) for the correct domain.',
+    };
+  },
+
+  // 4. MITM exposure (eavesdropper active + plaintext services) -------------
+  function checkMitmExposure(c) {
+    if (!SIM.mitmActive) return null;
+    const plaintextWeb = c.webServers.some(s => !s.services.web.cert);
+    if (!plaintextWeb && !c.mailServers.length && !c.fileServers.length) return null;
+    return {
+      severity: 'critical',
+      category: 'MITM',
+      title: 'Man-in-the-middle can intercept live traffic',
+      body: 'An eavesdropper is present on the network and unencrypted protocols (HTTP/SMTP/FTP) are in use. ' +
+            'All such traffic — including credentials — can be captured or modified in transit.',
+      fix: 'Encrypt everything: HTTPS for web, and prefer secure variants (SMTPS/FTPS) for mail and file transfer.',
+    };
+  },
+
+  // 5. No firewall protecting the LAN ---------------------------------------
+  function checkNoFirewall(c) {
+    if (!c.routers.length) return null;
+    const anyFirewall = c.routers.some(r => r.config.firewall && r.config.firewall.enabled);
+    if (anyFirewall) return null;
+    return {
+      severity: 'medium',
+      category: 'Firewall',
+      title: 'No firewall is enabled on any router',
+      body: 'With no firewall, every port on every internal host is reachable from anywhere that can route to it. This dramatically increases the attack surface.',
+      fix: 'Enable the firewall on your gateway router and allow only the ports you actually need (default-deny is best practice).',
+    };
+  },
+
+  // 6. Firewall present but default-allow with no block rules ---------------
+  function checkPermissiveFirewall(c) {
+    const permissive = c.routers.filter(r =>
+      r.config.firewall && r.config.firewall.enabled &&
+      r.config.firewall.defaultAction === 'allow' &&
+      !r.config.firewall.rules.some(rule => rule.action === 'block'));
+    if (!permissive.length) return null;
+    return {
+      severity: 'low',
+      category: 'Firewall',
+      title: 'Firewall is effectively wide open',
+      body: `${permissive.map(r => r.name).join(', ')} run a firewall that allows everything by default and has no block rules — so it isn\'t filtering anything.`,
+      fix: 'Adopt a default-deny posture: set the default action to BLOCK and add explicit ALLOW rules for required services.',
+    };
+  },
+
+  // 7. Unsecured file / mail services ---------------------------------------
+  function checkLegacyProtocols(c) {
+    const bits = [];
+    if (c.fileServers.length) bits.push(`FTP (port 21) on ${c.fileServers.map(s=>s.name).join(', ')}`);
+    if (c.mailServers.length) bits.push(`SMTP (port 25) on ${c.mailServers.map(s=>s.name).join(', ')}`);
+    if (!bits.length) return null;
+    return {
+      severity: 'medium',
+      category: 'Unsecured Protocol',
+      title: 'Legacy clear-text services are exposed',
+      body: `${bits.join(' and ')} transmit data (and often passwords) without encryption by default.`,
+      fix: 'Use encrypted replacements (FTPS/SFTP, SMTP+STARTTLS) and restrict access with firewall rules.',
+    };
+  },
+
+  // 8. DNS present? (misconfiguration that breaks name resolution) ----------
+  function checkNoDns(c) {
+    if (!c.dnsServers.length && (c.webServers.length || c.pcs.length)) {
+      return {
+        severity: 'low',
+        category: 'Misconfiguration',
+        title: 'No DNS server on the network',
+        body: 'Clients can only reach services by raw IP address. Domain names (e.g. www.myschool.local) will not resolve.',
+        fix: 'Enable the DNS service on a server and add A/CNAME records for your hosts.',
+      };
+    }
+    return null;
+  },
+
+  // 9. Phishing susceptibility (look-alike / no HTTPS to distinguish) -------
+  function checkPhishing(c) {
+    if (!c.webServers.length) return null;
+    // Educational heuristic: if the site isn't HTTPS, users can't visually
+    // verify authenticity, making phishing/spoofing easier.
+    const noHttps = c.webServers.filter(s => !s.services.web.cert);
+    if (!noHttps.length) return null;
+    return {
+      severity: 'medium',
+      category: 'Phishing',
+      title: 'Users cannot verify site authenticity',
+      body: 'Without HTTPS and a valid certificate, there is no padlock or identity check in the browser. ' +
+            'Attackers can stand up a look-alike site and users have no reliable way to tell the difference.',
+      fix: 'Deploy HTTPS with a trusted certificate so browsers display identity indicators; educate users to check the padlock and domain.',
+    };
+  },
+
+  // 10. SQL injection / XSS on web content ----------------------------------
+  function checkInjection(c) {
+    if (!c.webServers.length) return null;
+    const xssServers = c.webServers.filter(s => /<script|onerror=|onload=|javascript:/i.test(s.services.web.html || ''));
+    const formServers = c.webServers.filter(s => /<form|<input/i.test(s.services.web.html || ''));
+    const findingsBits = [];
+    if (xssServers.length) findingsBits.push(`stored script/handler markup on ${xssServers.map(s=>s.name).join(', ')} (potential XSS)`);
+    if (formServers.length) findingsBits.push(`user-input forms on ${formServers.map(s=>s.name).join(', ')} (validate to prevent SQL injection)`);
+    if (!findingsBits.length) return null;
+    return {
+      severity: xssServers.length ? 'high' : 'medium',
+      category: 'Injection (XSS/SQLi)',
+      title: 'Web content may be vulnerable to injection',
+      body: `Detected ${findingsBits.join('; ')}. Untrusted input rendered without escaping enables cross-site scripting; ` +
+            'input concatenated into database queries enables SQL injection.',
+      fix: 'Escape/encode all output, validate and sanitise input, and use parameterised (prepared) queries for any database access.',
+    };
+  },
+
+  // 11. DDoS resilience -----------------------------------------------------
+  function checkDdos(c) {
+    if (!c.webServers.length) return null;
+    const protectedByFw = c.routers.some(r => r.config.firewall && r.config.firewall.enabled);
+    return {
+      severity: protectedByFw ? 'low' : 'medium',
+      category: 'DDoS',
+      title: protectedByFw ? 'Limited DDoS mitigation in place' : 'No DDoS protection',
+      body: protectedByFw
+        ? 'A firewall can drop some flood traffic, but a single gateway is still a bottleneck that a large volumetric attack could overwhelm.'
+        : 'A flood of requests from many sources could exhaust the server or its single uplink, taking the service offline.',
+      fix: 'Add rate-limiting, upstream filtering / a CDN or scrubbing service, and redundant capacity. Never rely on a single choke point.',
+      demo: () => animateDdos(c.webServers[0]),
+    };
+  },
+
+  // 12. Servers reachable / connected sanity --------------------------------
+  function checkOrphans(c) {
+    const orphans = c.servers.filter(s => !SIM.links.some(l => l.a === s.id || l.b === s.id));
+    if (!orphans.length) return null;
+    return {
+      severity: 'low',
+      category: 'Misconfiguration',
+      title: 'Unconnected server(s)',
+      body: `${orphans.map(s => s.name).join(', ')} are not wired into the network and cannot serve anyone.`,
+      fix: 'Connect the server to a switch or router.',
+    };
+  },
+];
+
+/**
+ * Animate a simple DDoS: many red packets flood from all PCs (or a synthetic
+ * source) toward the target server, illustrating volumetric overload.
+ */
+function animateDdos(targetServer) {
+  if (!targetServer) return;
+  // Prefer PCs as attack sources; fall back to any non-server node.
+  const pcs = SIM.nodes.filter(n => n.type === 'pc');
+  const srcs = pcs.length ? pcs : SIM.nodes.filter(n => n.type !== 'server');
+  logMsg(`Pen-Test: simulating a DDoS flood against ${targetServer.name}…`, 'danger');
+  let launched = 0;
+  const timer = setInterval(() => {
+    // Launch a burst of packets from each available source.
+    (srcs.length ? srcs : SIM.nodes).forEach(src => {
+      if (src.id === targetServer.id) return;
+      const path = findPath(src.id, targetServer.id);
+      if (path) spawnPacket(path, { kind: 'dropped', speed: PACKET.speed * 1.8 });
+    });
+    if (++launched >= 8) {
+      clearInterval(timer);
+      logMsg(`Pen-Test: ${targetServer.name} hit by a burst flood — an unprotected server would be overwhelmed.`, 'danger');
+    }
+  }, 180);
+}
+
+/** Run every check, returning a sorted array of findings. */
+function runPentest() {
+  const ctx = buildPentestContext();
+  const findings = [];
+  CHECKS.forEach(fn => {
+    try {
+      const f = fn(ctx);
+      if (f) findings.push(f);
+    } catch (err) {
+      // A broken custom check shouldn't crash the assessment.
+      console.error('Pen-test check failed:', err);
+    }
+  });
+  // Sort by severity (most severe first).
+  findings.sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity]);
+  return findings;
+}
+
+/** Compute an overall grade + summary counts from findings. */
+function pentestScore(findings) {
+  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+  findings.forEach(f => { if (counts[f.severity] != null) counts[f.severity]++; });
+  // Simple scoring: start at 100, subtract weighted penalties.
+  let score = 100 - (counts.critical * 34 + counts.high * 18 + counts.medium * 9 + counts.low * 3);
+  score = Math.max(0, score);
+  let grade, cls;
+  if (counts.critical > 0 || score < 50) { grade = 'F'; cls = 'bad'; }
+  else if (score < 70) { grade = 'C'; cls = 'warn'; }
+  else if (score < 90) { grade = 'B'; cls = 'good'; }
+  else { grade = 'A'; cls = 'good'; }
+  return { score, grade, cls, counts };
+}
+
+/* ---- Pen-test modal wiring ------------------------------------------------ */
+// (pentestModal is declared earlier, alongside the terminal modal element.)
+
+/** Open the pen-test modal. */
+function openPentest() {
+  pentestModal.classList.remove('hidden');
+}
+/** Close the pen-test modal. */
+function closePentest() {
+  pentestModal.classList.add('hidden');
+}
+
+/** Run the assessment and render the report. */
+function renderPentest() {
+  const summaryEl = document.getElementById('pentestSummary');
+  const resultsEl = document.getElementById('pentestResults');
+
+  if (SIM.nodes.length === 0) {
+    summaryEl.innerHTML = `<div class="pt-empty"><div class="pt-empty-icon">🛡</div>
+      <div>Build a network first, then run the assessment.</div></div>`;
+    resultsEl.innerHTML = '';
+    return;
+  }
+
+  const findings = runPentest();
+  const { score, grade, cls, counts } = pentestScore(findings);
+
+  // Summary banner.
+  const issueTotal = counts.critical + counts.high + counts.medium + counts.low;
+  summaryEl.innerHTML = `
+    <div class="pt-score">
+      <div class="pt-grade ${cls}">${grade}</div>
+      <div class="pt-score-meta">
+        <div class="pt-score-title">Security score: ${score}/100</div>
+        <div class="pt-score-sub">${issueTotal === 0
+          ? 'No issues detected in the current design. Well done!'
+          : `${issueTotal} issue${issueTotal === 1 ? '' : 's'} found across your network.`}</div>
+        <div class="pt-counts">
+          <span class="pt-count crit">${counts.critical} critical</span>
+          <span class="pt-count high">${counts.high} high</span>
+          <span class="pt-count med">${counts.medium} medium</span>
+          <span class="pt-count pass">${counts.low} low</span>
+        </div>
+      </div>
+    </div>`;
+
+  // Findings list.
+  if (!findings.length) {
+    resultsEl.innerHTML = `<div class="pt-finding pass">
+      <div class="pt-finding-head">
+        <span class="pt-sev pass">Pass</span>
+        <span class="pt-finding-title">No vulnerabilities detected</span>
+      </div>
+      <div class="pt-finding-body">Your current topology and configuration passed all automated checks. Keep testing as you add services.</div>
+    </div>`;
+  } else {
+    resultsEl.innerHTML = findings.map((f, i) => `
+      <div class="pt-finding ${f.severity}">
+        <div class="pt-finding-head">
+          <span class="pt-sev ${f.severity}">${f.severity}</span>
+          <span class="pt-finding-title">${escapeHtml(f.title)}</span>
+          <span class="pt-finding-cat">${escapeHtml(f.category)}</span>
+        </div>
+        <div class="pt-finding-body">${escapeHtml(f.body)}</div>
+        <div class="pt-finding-fix"><b>Remediation:</b> ${escapeHtml(f.fix)}</div>
+        ${f.demo ? `<div class="pt-finding-demo"><button class="btn danger pt-demo-btn" data-demo="${i}">▶ Demonstrate attack</button></div>` : ''}
+      </div>`).join('');
+
+    // Wire up demo buttons.
+    resultsEl.querySelectorAll('[data-demo]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const f = findings[Number(btn.dataset.demo)];
+        if (f && f.demo) { closePentest(); f.demo(); }
+      });
+    });
+  }
+
+  logMsg(`Pen-Test complete: score ${score}/100 (grade ${grade}), ${issueTotal} issue(s).`,
+         issueTotal === 0 ? 'secure' : (counts.critical ? 'danger' : 'warning'));
+}
+
+
+/* ============================================================================
+   9d. PERSISTENCE  —  SAVE / LOAD / EXPORT / IMPORT  (Phase 7)
+   ============================================================================
+   The whole simulation is data, so saving is just serialising the parts of SIM
+   that matter (nodes, links, leases, name counters, the id sequence, MITM
+   flag). Volatile things (in-flight packets, current selection, animation flag)
+   are intentionally NOT saved.
+
+   - Save / Load use localStorage (persists in this browser).
+   - Export / Import use a downloadable .json file (share between machines).
+   ========================================================================== */
+
+const STORAGE_KEY = 'network-simulator.save.v1';
+const SAVE_VERSION = 1;
+
+/** Produce a plain-object snapshot of the current network. */
+function serializeState() {
+  return {
+    version: SAVE_VERSION,
+    savedAt: new Date().toISOString(),
+    nodes: SIM.nodes,
+    links: SIM.links,
+    leases: SIM.leases,
+    mitmActive: SIM.mitmActive,
+    nameCounters: NAME_COUNTERS,
+    nextId: SIM._nextId,
+  };
+}
+
+/**
+ * Replace the live state with a loaded snapshot. Performs light validation and
+ * restores the id sequence / name counters so new devices keep unique names.
+ */
+function deserializeState(data) {
+  if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.links)) {
+    throw new Error('File does not look like a saved network.');
+  }
+  // Reset transient state.
+  SIM.packets = [];
+  SIM.selectedId = SIM.selectedLinkId = SIM.connectFrom = null;
+  SIM.mode = 'select';
+
+  // Restore persistent state.
+  SIM.nodes = data.nodes;
+  SIM.links = data.links;
+  SIM.leases = data.leases || {};
+  SIM.mitmActive = !!data.mitmActive;
+  SIM._nextId = data.nextId || (SIM.nodes.length + SIM.links.length + 1);
+
+  // Restore name counters (fall back to recomputing from node names).
+  Object.keys(NAME_COUNTERS).forEach(k => NAME_COUNTERS[k] = 0);
+  if (data.nameCounters) {
+    Object.assign(NAME_COUNTERS, data.nameCounters);
+  } else {
+    SIM.nodes.forEach(n => { NAME_COUNTERS[n.type] = (NAME_COUNTERS[n.type] || 0) + 1; });
+  }
+
+  // Reflect restored flags in the UI.
+  btnMitm.classList.toggle('active', SIM.mitmActive);
+  setMode('select');
+  syncDnsPointer();
+  refreshUI();
+}
+
+/** Save to localStorage. */
+function saveToBrowser() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+    logMsg('Network saved to this browser.', 'secure');
+  } catch (err) {
+    logMsg('Save failed: ' + err.message, 'danger');
+  }
+}
+
+/** Load from localStorage. */
+function loadFromBrowser() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) { logMsg('No saved network found in this browser.', 'warning'); return; }
+  try {
+    deserializeState(JSON.parse(raw));
+    logMsg('Network loaded from this browser.', 'secure');
+  } catch (err) {
+    logMsg('Load failed: ' + err.message, 'danger');
+  }
+}
+
+/** Export the current network as a downloadable .json file. */
+function exportToFile() {
+  const blob = new Blob([JSON.stringify(serializeState(), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'network-simulator.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  logMsg('Network exported to network-simulator.json.', 'info');
+}
+
+/** Import a .json network file chosen by the user. */
+function importFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      deserializeState(JSON.parse(reader.result));
+      logMsg(`Imported network from "${file.name}".`, 'secure');
+    } catch (err) {
+      logMsg('Import failed: ' + err.message, 'danger');
+    }
+  };
+  reader.onerror = () => logMsg('Could not read the selected file.', 'danger');
+  reader.readAsText(file);
+}
+
+/* ----------------------------------------------------------------------------
+   SAMPLE SCENARIO  —  a ready-made network so students/educators can explore
+   immediately. Educators can edit this to seed lessons or assessment tasks.
+   ---------------------------------------------------------------------------- */
+function loadSampleScenario() {
+  // Clear existing.
+  SIM.nodes = []; SIM.links = []; SIM.packets = []; SIM.leases = {};
+  SIM.mitmActive = false; btnMitm.classList.remove('active');
+  SIM.selectedId = SIM.selectedLinkId = SIM.connectFrom = null;
+  Object.keys(NAME_COUNTERS).forEach(k => NAME_COUNTERS[k] = 0);
+  SIM._nextId = 1;
+
+  // Helper to place a node at a position.
+  const place = (type, x, y) => { const n = makeNode(type, x, y); SIM.nodes.push(n); return n; };
+
+  const rect = canvas.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+
+  const pc1    = place('pc',     cx - 260, cy - 90);
+  const pc2    = place('pc',     cx - 260, cy + 90);
+  const sw     = place('switch', cx - 90,  cy);
+  const router = place('router', cx + 80,  cy);
+  const server = place('server', cx + 280, cy - 60);
+  const wan    = place('wan',    cx + 280, cy + 90);
+
+  // Wire them up.
+  addLinkSilent(pc1.id, sw.id);
+  addLinkSilent(pc2.id, sw.id);
+  addLinkSilent(sw.id, router.id);
+  addLinkSilent(router.id, server.id);
+  addLinkSilent(router.id, wan.id);
+
+  // Give the server an IP + services (DNS + Web) with a sample record + page.
+  server.config.ip = NETWORK.lanPrefix + '101';
+  server.config.gateway = router.config.ip;
+  SIM.leases[101] = server.id;
+  server.services.dns.enabled = true;
+  server.services.dns.records = [
+    { type: 'A', name: 'www.myschool.local', value: server.config.ip },
+    { type: 'CNAME', name: 'portal.myschool.local', value: 'www.myschool.local' },
+  ];
+  server.services.web.enabled = true;
+  server.services.web.html =
+    '<h1>My School Portal</h1>\n<p>Welcome! This site is served from the sample network.</p>\n<p>Try visiting over HTTP and HTTPS to compare security.</p>';
+  server.config.dns = server.config.ip;
+
+  // Lease the PCs.
+  [pc1, pc2].forEach((pc, i) => {
+    const host = 100 + i;
+    pc.config.ip = NETWORK.lanPrefix + host;
+    pc.config.gateway = router.config.ip;
+    pc.config.dns = server.config.ip;
+    SIM.leases[host] = pc.id;
+  });
+
+  syncDnsPointer();
+  selectNode(server.id);
+  logMsg('Loaded the sample "My School" network. Open PC-1\'s terminal and try: curl http://www.myschool.local', 'info');
+  refreshUI();
+}
+
+/** Like addLink but without logging (used when building sample scenarios). */
+function addLinkSilent(a, b) {
+  if (a === b || linkExists(a, b)) return;
+  SIM.links.push({ id: uid('link-'), a, b });
+}
+
+
+/* ============================================================================
+   10. UI GLUE + INIT
+   ========================================================================== */
+
+/** Update the small status chips in the canvas corner. */
+function updateStatusChips() {
+  const modeChip = document.getElementById('chipMode');
+  const countChip = document.getElementById('chipCount');
+  modeChip.classList.toggle('mode-on', SIM.mode === 'connect');
+  modeChip.innerHTML = `<span class="dot"></span> ${SIM.mode === 'connect' ? 'Connect mode' : 'Select mode'}`;
+  countChip.innerHTML = `<span class="dot"></span> ${SIM.nodes.length} nodes · ${SIM.links.length} links`;
+}
+
+/** Show/hide the empty-canvas hint. */
+function updateCanvasHint() {
+  document.getElementById('canvasHint').classList.toggle('hidden', SIM.nodes.length > 0);
+}
+
+/** Enable/disable the Delete button based on selection. */
+function updateToolButtons() {
+  btnDelete.disabled = !(SIM.selectedId || SIM.selectedLinkId);
+}
+
+/**
+ * refreshUI() is the single "something changed" entry point: it redraws the
+ * canvas and re-renders all dependent DOM (panel, chips, hint, buttons).
+ */
+function refreshUI() {
+  draw();
+  renderConfigPanel();
+  updateStatusChips();
+  updateCanvasHint();
+  updateToolButtons();
+}
+
+/** Bootstrap the application. */
+function init() {
+  resizeCanvas();       // sizes the canvas and triggers the first draw
+  refreshUI();
+  logMsg('Network Simulator ready. Add devices to begin building your network.', 'info');
+  logMsg('Tip: click ✨ Example for a ready-made network, or use 🔗 Connect to link devices.', '');
+}
+
+// Kick things off once the DOM is ready.
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Network Simulator — Lesson Answers (Teacher Copy)</title>
+
+<!--
+  ============================================================================
+  NETWORK SIMULATOR  —  SUGGESTED ANSWERS (TEACHER COPY)
+  ============================================================================
+  Companion to `lessons.html`. For each lesson this document restates the
+  question and provides a suggested response.
+
+  These are model answers to guide marking. Students may express valid ideas
+  differently; credit correct reasoning even when the wording varies.
+
+  Printing: @media print rules place each lesson's answers on a new page.
+  ============================================================================
+-->
+
+<style>
+  /* ==========================================================================
+     DESIGN SYSTEM  —  mirrors lessons.html / network-simulator.html
+     ========================================================================== */
+  :root {
+    --bg:            #ffffff;
+    --surface:       #ffffff;
+    --surface-alt:   #f7f8fa;
+    --border:        #e4e7ec;
+    --border-strong: #d0d5dd;
+    --text:          #1a1d23;
+    --text-muted:    #667085;
+    --text-faint:    #98a2b3;
+
+    --accent:        #2563eb;
+    --accent-soft:   #eff4ff;
+
+    --secure:        #16a34a;
+    --secure-soft:   #eafaf0;
+    --danger:        #dc2626;
+    --danger-soft:   #fdecec;
+    --warning:       #d97706;
+    --warning-soft:  #fef6e7;
+    --info:          #0891b2;
+
+    --radius:        10px;
+    --radius-sm:     7px;
+    --shadow-sm:     0 1px 2px rgba(16,24,40,0.05);
+
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+            Arial, "Inter", sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--surface-alt);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ==========================================================================
+     LAYOUT
+     ========================================================================== */
+  .page-wrap { max-width: 820px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  .cover {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 32px 34px;
+    margin-bottom: 28px;
+  }
+  .cover .eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .cover h1 { font-size: 30px; margin: 6px 0 8px; letter-spacing: -0.02em; }
+  .cover p { color: var(--text-muted); margin: 0 0 4px; }
+  .cover .logo {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), #7c3aed);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 18px; margin-bottom: 12px;
+  }
+  .teacher-tag {
+    display: inline-block; margin-top: 14px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--warning); background: var(--warning-soft);
+    border: 1px solid #f5d9a8; border-radius: 999px; padding: 4px 12px;
+  }
+
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 20px 24px;
+    margin-bottom: 28px;
+  }
+  .toc h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); margin: 0 0 12px; }
+  .toc ol { margin: 0; padding-left: 22px; }
+  .toc li { margin: 5px 0; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* ==========================================================================
+     LESSON ANSWER CARD
+     ========================================================================== */
+  .lesson {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 30px 34px;
+    margin-bottom: 26px;
+  }
+  .lesson-head {
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 14px; margin-bottom: 18px;
+  }
+  .lesson-num {
+    display: inline-block;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: #fff; background: var(--accent);
+    padding: 3px 10px; border-radius: 999px; margin-bottom: 10px;
+  }
+  .lesson h2 { font-size: 23px; margin: 0; letter-spacing: -0.01em; }
+
+  /* Question + answer blocks */
+  .qa { margin: 0 0 6px; }
+  .qa > .q {
+    display: flex; gap: 10px; align-items: baseline;
+    font-weight: 600; margin: 18px 0 6px;
+  }
+  .qa > .q .tag {
+    font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--accent);
+    flex: 0 0 auto;
+  }
+  .qa > .a {
+    border-left: 3px solid var(--secure);
+    background: var(--secure-soft);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 10px 14px;
+    margin-left: 2px;
+  }
+  .qa > .a .label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--secure); display: block; margin-bottom: 4px;
+  }
+  .qa > .a p { margin: 0 0 8px; }
+  .qa > .a p:last-child { margin-bottom: 0; }
+  .qa > .a ul { margin: 4px 0 8px; padding-left: 20px; }
+  .qa > .a li { margin: 4px 0; }
+
+  code {
+    font-family: var(--mono); font-size: 0.86em;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 5px; padding: 1px 6px; color: var(--text);
+  }
+  strong { color: var(--text); }
+
+  .note {
+    border-radius: var(--radius-sm); padding: 12px 14px; margin: 14px 0;
+    font-size: 14px; border: 1px solid #f5d9a8; background: var(--warning-soft);
+  }
+  .note .label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--warning); display: block; margin-bottom: 4px;
+  }
+
+  /* ==========================================================================
+     PRINT
+     ========================================================================== */
+  @media print {
+    @page { size: A4; margin: 16mm 14mm; }
+    html, body { background: #fff; font-size: 11.5pt; }
+    .page-wrap { max-width: none; margin: 0; padding: 0; }
+
+    .cover, .toc, .lesson { box-shadow: none; border: none; padding: 0; margin: 0; }
+    .cover { page-break-after: always; }
+    .toc   { page-break-after: always; }
+    .toc a { color: var(--text); text-decoration: none; }
+
+    .lesson { page-break-before: always; padding-top: 4mm; }
+    .lesson:first-of-type { page-break-before: avoid; }
+
+    .lesson-head, .qa { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
+
+    .lesson-num { background: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .qa > .a {
+      background: #fff; border-left-color: #000;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .qa > .a .label { color: #000; }
+
+    .no-print { display: none !important; }
+  }
+</style>
+</head>
+
+<body>
+<div class="page-wrap">
+
+  <!-- ======================================================================
+       COVER
+       ====================================================================== -->
+  <header class="cover">
+    <div class="logo">◈</div>
+    <div class="eyebrow">IB Computer Science</div>
+    <h1>Network Simulator — Suggested Answers</h1>
+    <p>Model responses to the questions in <code>lessons.html</code>.</p>
+    <p>These answers are intended to guide marking. Students may phrase correct ideas differently; award credit for sound reasoning even where the wording varies from the model.</p>
+    <span class="teacher-tag">Teacher copy</span>
+  </header>
+
+  <!-- ======================================================================
+       TABLE OF CONTENTS
+       ====================================================================== -->
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#l1">The IP model: LAN, subnet and the router as gateway</a></li>
+      <li><a href="#l2">DHCP: obtaining IP addresses dynamically</a></li>
+      <li><a href="#l3">DNS: zones, A and CNAME records, and resolution</a></li>
+      <li><a href="#l4">Web servers: hosting page content</a></li>
+      <li><a href="#l5">The terminal: ping, nslookup, curl, ipconfig</a></li>
+      <li><a href="#l6">Firewalls and filtering traffic</a></li>
+      <li><a href="#l7">TLS certificates and Let's Encrypt</a></li>
+      <li><a href="#l8">Denial of service (DDoS) and rate limiting</a></li>
+      <li><a href="#l9">Man-in-the-middle interception</a></li>
+      <li><a href="#l10">Unsecured protocols (ports 80, 21, 25)</a></li>
+      <li><a href="#l11">Application attacks: phishing, SQL injection, XSS</a></li>
+      <li><a href="#l12">Expired and missing certificates</a></li>
+    </ol>
+  </nav>
+
+  <!-- ======================================================================
+       LESSON 1 — IP MODEL
+       ====================================================================== -->
+  <section class="lesson" id="l1">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 1 — Answers</span>
+      <h2>The IP model: LAN, subnet and the router as gateway</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>What is the purpose of the network prefix, and how does the subnet mask <code>255.255.255.0</code> separate the network part of an address from the host part?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The network prefix identifies the network that a device belongs to; all devices sharing the same prefix are on the same subnet and can communicate directly. The subnet mask marks which bits of the address are the network part and which are the host part. In <code>255.255.255.0</code> the first three octets are all-ones (network) and the last octet is all-zeros (host), so <code>192.168.1.x</code> is the network and <code>x</code> identifies the individual host.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>Two PCs have addresses <code>192.168.1.100</code> and <code>192.168.1.150</code>. Are they on the same subnet? Justify using the subnet mask.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Yes. Applying the mask <code>255.255.255.0</code>, the network portion of both addresses is <code>192.168.1</code>, which is identical. Only the host portion (<code>.100</code> versus <code>.150</code>) differs, so both belong to the same subnet and can communicate without going through the router.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>What is a default gateway, and why does a PC need to know its gateway's address to reach a device outside the LAN?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The default gateway is the router that connects the LAN to other networks. When a PC needs to reach an address that is not on its own subnet, it cannot deliver the traffic directly, so it sends it to the gateway, which forwards it onward. Without the gateway's address the PC has nowhere to send off-subnet traffic and can only reach local devices.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>The router has both a LAN IP and a separate WAN IP. Explain the role of each.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The LAN IP (e.g. <code>192.168.1.1</code>) is the router's address on the internal network; it is the address local devices use as their gateway. The WAN IP (e.g. <code>203.0.113.1</code>) is the router's address on the external/public side; it identifies the router to the wider internet. The router bridges the two, forwarding traffic between the private LAN and the public WAN.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>How many usable host addresses does a <code>/24</code> network provide, and why is that not simply 256?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>A <code>/24</code> has 8 host bits, giving 2<sup>8</sup> = 256 total addresses, but only 254 are usable for hosts. Two are reserved: the all-zeros host address is the network identifier and the all-ones host address is the broadcast address, so neither can be assigned to a device.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 2 — DHCP
+       ====================================================================== -->
+  <section class="lesson" id="l2">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 2 — Answers</span>
+      <h2>DHCP: obtaining IP addresses dynamically</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>List the four pieces of configuration a client typically receives from DHCP in this simulator, and state what each is used for.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <ul>
+          <li><strong>IP address</strong> — the client's own unique address on the LAN.</li>
+          <li><strong>Subnet mask</strong> — tells the client which addresses are local versus remote.</li>
+          <li><strong>Default gateway</strong> — the router address to send off-subnet traffic to.</li>
+          <li><strong>DNS server</strong> — the address to send name-resolution queries to.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>Why is an address described as a "lease" rather than a permanent assignment? Give one advantage of leasing.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>A lease is temporary and expires (or can be released), after which the address returns to the pool. This lets a limited pool serve many devices that come and go, so addresses are not wasted on devices that are no longer present. It also makes the network easier to manage, since configuration is handled centrally rather than by hand.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>The default pool runs from <code>.100</code> to <code>.199</code>. What is the maximum number of devices that can hold a lease at once, and what happens when the pool is exhausted?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The pool spans <code>.100</code> to <code>.199</code> inclusive, which is 100 addresses, so at most 100 devices can hold a lease simultaneously. When the pool is exhausted, further requests fail and the simulator reports that no address is available; a new device cannot obtain a lease until one is released.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>Why must a client be able to reach the DHCP server over the network before it can obtain an address?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>DHCP is itself a network exchange: the client must send a request to the server and receive a reply. If there is no physical path to the DHCP server (for example the device is unconnected), the request cannot reach it and no lease can be granted. The client has no IP yet, so this initial exchange relies on the underlying link rather than on IP routing.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>Give one reason an administrator might reserve part of the address range outside the DHCP pool for manual assignment.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Servers, routers and printers usually need a fixed, predictable address so that DNS records, firewall rules and clients can rely on them. Keeping those addresses outside the DHCP pool prevents the server from ever handing them out to another device and avoids conflicts.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 3 — DNS
+       ====================================================================== -->
+  <section class="lesson" id="l3">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 3 — Answers</span>
+      <h2>DNS: zones, A and CNAME records, and resolution</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>Explain the difference between an A record and a CNAME record, and give an example use for each.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>An A record maps a name directly to an IPv4 address (e.g. <code>www.myschool.local → 192.168.1.101</code>); it is used to point a name at the server hosting it. A CNAME record maps a name to another name, creating an alias (e.g. <code>portal.myschool.local → www.myschool.local</code>); it is used when several names should follow the same target so that only the underlying A record needs updating.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>When you resolved <code>portal.myschool.local</code>, describe the sequence of steps the resolver took to reach a final IP address.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The resolver looked up <code>portal.myschool.local</code> and found a CNAME pointing to <code>www.myschool.local</code>. It then followed that alias and looked up <code>www.myschool.local</code>, found its A record, and returned the associated IP address (e.g. <code>192.168.1.101</code>). The chain was CNAME → A → IP address.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>Why might using a CNAME be more maintainable than creating several separate A records when one server hosts several named sites?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>With CNAMEs, all the names point to a single canonical name that has one A record. If the server's IP address changes, only that one A record needs updating and every alias follows automatically. With separate A records, each name would have to be changed individually, which is more work and more error-prone.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>What happens to name resolution across the whole network if the DNS server is switched off or unreachable? What could still work, and how?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Name resolution fails: names such as <code>www.myschool.local</code> can no longer be translated to addresses, so any command or request that relies on a name will fail. Connections made directly by IP address still work, because they do not require DNS. This shows DNS is a convenience/availability dependency, not part of the raw routing.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>The resolver limits how many CNAMEs it will follow. Why is such a limit necessary?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>CNAME records can point to other CNAMEs, and a misconfiguration could create a loop (A → B → A) or an excessively long chain. A limit stops the resolver following the chain forever, preventing it from hanging and allowing it to report an error instead.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 4 — WEB SERVER
+       ====================================================================== -->
+  <section class="lesson" id="l4">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 4 — Answers</span>
+      <h2>Web servers: hosting page content</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>Describe the request/response cycle for a single web page, naming the request method and the meaning of a <code>200 OK</code> status.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The client sends an HTTP request, typically <code>GET /</code>, asking for a resource. The server processes it and sends back a response consisting of a status line, headers and the page body (HTML). A <code>200 OK</code> status means the request succeeded and the requested content is included in the response.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>Which port does plain HTTP use, and which does HTTPS use? Why does it matter that these differ?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>HTTP uses port 80 and HTTPS uses port 443. Using distinct ports lets a server offer both, and lets clients, firewalls and administrators distinguish encrypted from unencrypted traffic — for example to block port 80 while allowing 443, or to know that traffic on 443 is protected by TLS.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>When the Web service was disabled, what response did the client get, and what does this tell you about how servers handle requests to closed ports?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The client received a "connection refused" message. This shows that a request to a port where no service is listening is rejected rather than served: a port is only useful if a service is actually running behind it, so disabling the service effectively closes that port to clients.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>Why is it useful to reach a website by name rather than by IP address, both for users and for the site operator?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Names are easier for users to remember and type than numeric addresses. For the operator, a name provides a stable identity even if the underlying IP address changes: only the DNS record needs updating, and users keep using the same name. Names also allow several sites to be organised under one domain.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>The simulator serves one page per server. In reality a web server hosts many resources. What role does the path (the part of a URL after the host name) play?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The path identifies which specific resource on the server is being requested (for example <code>/about</code> or <code>/images/logo.png</code>). The host name selects the server; the path selects what to return from that server. This lets one server host many distinct pages and files.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 5 — TERMINAL
+       ====================================================================== -->
+  <section class="lesson" id="l5">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 5 — Answers</span>
+      <h2>The terminal: ping, nslookup, curl, ipconfig</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>What information does <code>ipconfig</code> report, and why is it usually the first command to run when a PC cannot reach the network?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p><code>ipconfig</code> reports the PC's own IP address, subnet mask, default gateway and DNS server. It is run first because it confirms whether the PC has valid addressing at all: if it has no IP, or the wrong gateway or DNS, that alone explains the failure and points to a DHCP or configuration problem before anything else is investigated.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span><code>ping</code> can succeed while <code>curl</code> fails for the same host. Give a scenario and explain why.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>If the host is reachable but its web service is switched off (or the relevant port is blocked by a firewall), <code>ping</code> succeeds because the host responds to the reachability test, but <code>curl</code> fails because there is no web service listening or the request is dropped. Reachability and a working application service are two separate things.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>What is the difference between what <code>nslookup</code> tests and what <code>curl</code> tests?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p><code>nslookup</code> tests only name resolution: it asks the DNS server to translate a name into an IP address and reports the result. <code>curl</code> tests the full application request: it resolves the name (if needed), routes to the server, and retrieves the web page. <code>nslookup</code> exercises DNS; <code>curl</code> exercises DNS plus routing plus the web service.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>You <code>ping</code> a domain name and it fails, but pinging its IP address succeeds. What does this tell you?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The host itself is reachable (the IP works), so the problem is with name resolution: DNS is not translating the name to the address. This could be because no record exists for the name, the record is wrong, or the DNS server is off or unreachable. The fault lies in DNS, not in connectivity to the host.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>Why is it valuable that these commands operate on the network you built, rather than returning fixed sample output?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Because the output reflects the actual configuration, the commands become genuine diagnostic tools: a misconfiguration produces a real failure that you can investigate and fix. This lets you learn cause and effect and practise troubleshooting, which fixed sample output could not teach.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 6 — FIREWALL
+       ====================================================================== -->
+  <section class="lesson" id="l6">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 6 — Answers</span>
+      <h2>Firewalls and filtering traffic</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>Explain the difference between a default-allow and a default-deny firewall, and state which is generally more secure and why.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Default-allow permits any traffic that is not explicitly blocked; default-deny blocks any traffic that is not explicitly allowed. Default-deny is more secure because it fails safe: anything the administrator has not consciously permitted is refused, so newly exposed or forgotten services are blocked by default rather than being open until someone notices.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>Why does the order of rules matter? Give an example where a poorly ordered rule set fails to achieve its intent.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Because the first matching rule wins, a broad rule placed above a specific one can override it. For example, an <code>ALLOW any : any</code> rule placed above <code>BLOCK any : 80</code> means the allow matches first and port 80 is never blocked. The specific block should come before the broad allow to take effect.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>You blocked port 80 but a PC can still reach the site over port 443. Explain why blocking one port does not block a service entirely.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The web service listens on two ports: 80 for HTTP and 443 for HTTPS. A rule blocking port 80 only stops the plaintext path; requests on port 443 are unaffected and still reach the service. To block the service completely, both ports would need to be blocked.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>A firewall that is enabled but set to default-allow with no block rules provides little protection. Explain why.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>With no block rules and a default action of allow, every packet matches the default and is permitted. The firewall is switched on but is not actually filtering anything, so it offers no more protection than having no firewall at all.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>Give one advantage and one limitation of filtering traffic purely by IP address and port number.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p><strong>Advantage:</strong> it is simple and fast, and effectively controls which services can be reached from where. <strong>Limitation:</strong> it cannot inspect the content of the traffic, so it cannot detect attacks carried inside otherwise-allowed traffic (for example a SQL injection sent over an allowed port 443). It controls access to services but not what is done through them.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 7 — TLS CERTIFICATES
+       ====================================================================== -->
+  <section class="lesson" id="l7">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 7 — Answers</span>
+      <h2>TLS certificates and Let's Encrypt</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>What three checks does a client perform on a certificate during an HTTPS connection, and what does each protect against?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <ul>
+          <li><strong>Presence / trust:</strong> a certificate exists and is signed by a trusted CA — protects against a server with no verifiable identity.</li>
+          <li><strong>Expiry:</strong> the current date is within the validity period — protects against reliance on old, potentially compromised credentials.</li>
+          <li><strong>Domain match:</strong> the certificate is issued for the site being visited — protects against a valid certificate for one site being reused to impersonate another.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>What is the role of a Certificate Authority, and why must the client already trust the CA for the certificate to be meaningful?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>A Certificate Authority verifies an applicant's control of a domain and signs their certificate, vouching for the binding between the name and the identity. The client relies on a pre-installed list of trusted CAs; if it did not already trust the signer, anyone could sign their own certificate and the signature would prove nothing. Trust in the CA is what makes the certificate believable.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>Explain what "domain match" means and why a certificate for one domain should not be accepted for another.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Domain match means the domain named in the certificate is the same as the site the client is connecting to. If a certificate for <code>a.example</code> were accepted on <code>b.example</code>, an attacker holding a legitimate certificate for their own domain could present it while impersonating a different site, defeating the purpose of verifying identity.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>Why do certificates have an expiry date rather than lasting forever? Give a security reason.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Expiry limits the useful lifetime of a certificate and its associated key. If a key is compromised, the damage is bounded because the certificate will stop being trusted at expiry. Regular renewal also ensures records and ownership are re-verified periodically, keeping the trust information current.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>What does the <strong>Force HTTPS</strong> setting achieve, and why might a site operator enable it?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Force HTTPS makes the server refuse plain HTTP so that all connections must be encrypted. An operator enables it to guarantee that users never accidentally send data over an unencrypted connection, closing the window in which credentials or content could be intercepted.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 8 — DDoS
+       ====================================================================== -->
+  <section class="lesson" id="l8">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 8 — Answers</span>
+      <h2>Denial of service (DDoS) and rate limiting</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>Distinguish between a DoS and a DDoS attack. Why is the distributed form harder to defend against?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>A DoS attack comes from a single source; a DDoS attack comes from many sources at once. The distributed form is harder to defend against because the traffic is spread across many addresses, so simply blocking one source does not stop it, and the combined volume can be far larger. It is also harder to tell attack traffic apart from legitimate users.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>What is a bottleneck in the context of this attack, and where are the bottlenecks in your simulated network?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>A bottleneck is the point of limited capacity that the attack saturates first. In the simulated network the bottlenecks are the target server itself and the single link (uplink) leading to it through the router; once either is overwhelmed, legitimate requests cannot get through.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>Explain why a firewall alone is insufficient against a large volumetric attack.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>A firewall can drop unwanted packets, but it still sits on the single path to the server and must receive the traffic in order to filter it. A large enough flood can saturate the link or the firewall itself before filtering helps. Because everything funnels through one point, the firewall does not remove the underlying capacity bottleneck.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>Explain how rate limiting reduces the effect of a flood, and give one drawback of setting the limit too low.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Rate limiting caps how many requests a source may send in a time period, so a single source cannot consume all the capacity and the server stays responsive to others. If the limit is set too low, legitimate users making normal numbers of requests may be throttled or blocked, harming the service for real users.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>Why does adding redundant capacity or an upstream scrubbing service help, when simply making one server larger may not?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>A single larger server is still one point that can be overwhelmed and one link that can be saturated. Redundant capacity spreads load across multiple servers and paths so there is no single point of failure, and an upstream scrubbing service or CDN absorbs and filters the flood before it reaches your link, removing the bottleneck rather than just enlarging it.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 9 — MITM
+       ====================================================================== -->
+  <section class="lesson" id="l9">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 9 — Answers</span>
+      <h2>Man-in-the-middle interception</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>What is a man-in-the-middle attacker, and what position on the network do they need to occupy?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>A man-in-the-middle attacker sits on the communication path between a client and a server, where traffic passes through or by them. From that position they can observe, and potentially alter, the data in transit. They need to be somewhere on the route, such as a shared network segment, a compromised device along the path, or an untrusted access point.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>Using your observations, contrast what the interceptor could read for HTTP versus HTTPS traffic.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>For HTTP the packets were plaintext and the interceptor could read the actual content (for example the request and page data). For HTTPS the packets were encrypted and the interceptor saw only unreadable data (<code>••••••••</code>), so the content was protected even though the packets still passed through them.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>Encryption protects the content of traffic, but an interceptor may still observe some information. Suggest what an attacker might still learn.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Even with encryption, an attacker can typically see metadata: the source and destination IP addresses, the port (and therefore that it is HTTPS), the timing and size of the traffic, and often the domain being contacted. They cannot read the actual content, but they can learn who is talking to whom and roughly how much.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>Why is it dangerous to enter a password on a site served over plain HTTP, particularly on a shared or public network?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Over plain HTTP the password travels in readable form, so anyone able to intercept the traffic can capture it. On a shared or public network many others may be positioned to eavesdrop, making interception far more likely. The credential could then be reused to access the account.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>Explain how HTTPS defends against a man-in-the-middle, referring to both encryption and the certificate check.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Encryption ensures that even if the attacker sees the traffic, they cannot read or usefully modify it. The certificate check ensures the client is actually talking to the genuine server and not to the attacker impersonating it, because the attacker cannot present a valid, trusted, domain-matching certificate. Together they protect both the confidentiality of the data and the identity of the server.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 10 — UNSECURED PROTOCOLS
+       ====================================================================== -->
+  <section class="lesson" id="l10">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 10 — Answers</span>
+      <h2>Unsecured protocols (ports 80, 21, 25)</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>For each of ports 80, 21 and 25, name the protocol and state what kind of data it carries.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <ul>
+          <li><strong>Port 80 — HTTP:</strong> web page requests and content, in plaintext.</li>
+          <li><strong>Port 21 — FTP:</strong> file transfers, historically including login credentials in the clear.</li>
+          <li><strong>Port 25 — SMTP:</strong> email messages transferred between mail servers, unencrypted in the basic protocol.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>What does "attack surface" mean, and how does leaving unencrypted services open increase it?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>The attack surface is the total set of points where an attacker could try to interact with or exploit a system. Each open service and port is one such point. Leaving unencrypted services open adds points that are both reachable and inherently insecure (data can be read in transit), so it enlarges the attack surface and gives an attacker more opportunities.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>For one of the three protocols, name its secure alternative and explain what that alternative adds.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Accept any correct pairing, for example: HTTP → HTTPS, which adds TLS encryption and server authentication; FTP → FTPS or SFTP, which encrypts both the credentials and the file data; SMTP → SMTP with STARTTLS, which encrypts the mail transfer. In each case the alternative adds encryption (and often identity verification) so the data can no longer be read in transit.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>Blocking a port at the firewall and switching to an encrypted protocol are two different responses. Explain the difference and when you might use each.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Blocking a port stops the service from being reached at all from the blocked sources; you use it when the service is not needed there, or to reduce exposure. Switching to an encrypted protocol keeps the service available but protects its data in transit; you use it when the service is required but must be secured. They can be combined: encrypt what you keep, and block what you do not need.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>Why might an organisation still be running these legacy protocols, and what makes migrating away difficult?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Older systems and equipment may only support the legacy protocols, and long-standing processes or third parties may depend on them. Migration can require replacing or reconfiguring software, coordinating with external partners, testing for compatibility and retraining staff, all of which take time and money and carry a risk of disruption — so insecure defaults often persist.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 11 — APPLICATION ATTACKS
+       ====================================================================== -->
+  <section class="lesson" id="l11">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 11 — Answers</span>
+      <h2>Application attacks: phishing, SQL injection, XSS</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>Explain how phishing exploits a user's inability to verify a site's identity, and how HTTPS with a valid certificate helps.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Phishing relies on a user believing a fraudulent site or message is genuine. Without HTTPS and a valid certificate there is no reliable identity indicator, so a convincing look-alike is hard to distinguish from the real site. HTTPS with a valid, domain-matching certificate lets the browser confirm the site's identity and show a secure indicator, giving the user a means to check they are on the genuine site (though it does not stop them being deceived in other ways).</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>Describe how SQL injection works at a high level, and explain why parameterised queries prevent it.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>SQL injection happens when user input is concatenated directly into a database query, so crafted input is interpreted as part of the query's code and changes its meaning (for example bypassing a check or reading extra data). Parameterised (prepared) queries separate the query structure from the data: the input is supplied as a value that is never treated as code, so it cannot alter the query and the injection fails.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>Describe how cross-site scripting works, and explain what "escaping output" means and why it defends against XSS.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>XSS happens when a site includes untrusted input in a page without neutralising it, so an attacker's script runs in another user's browser. Escaping output means converting characters that have special meaning in HTML (such as <code>&lt;</code> and <code>&gt;</code>) into harmless equivalents so the input is displayed as text rather than executed as markup or script. This prevents the injected content from being treated as code.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>SQL injection and XSS both stem from mixing untrusted input with something else. Explain the common underlying cause and the general principle that prevents both.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>In both cases untrusted input is mixed with code or markup and then interpreted, so data is mistakenly treated as instructions (a query in SQLi, page/script in XSS). The general principle that prevents both is to keep data and code separate and never trust input: validate/sanitise input, and safely encode or parameterise it for the context in which it is used so it can only ever be treated as data.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>Why are application-layer attacks not stopped by a network firewall that filters on IP address and port alone?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>These attacks are carried inside legitimate-looking requests to services the firewall is meant to allow (for example a normal HTTPS request to port 443). A firewall filtering only on IP address and port permits that traffic and does not inspect its content, so the malicious payload passes through. Defending against them requires controls at the application itself, such as input validation, parameterised queries and output escaping.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       LESSON 12 — EXPIRED / MISSING CERTIFICATES
+       ====================================================================== -->
+  <section class="lesson" id="l12">
+    <div class="lesson-head">
+      <span class="lesson-num">Lesson 12 — Answers</span>
+      <h2>Expired and missing certificates</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q1</span><span>Distinguish between a missing, an expired and a self-signed certificate, and describe the client's response to each.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <ul>
+          <li><strong>Missing:</strong> no certificate is presented, so a secure connection cannot be established at all — the client refuses or reports HTTPS as unavailable.</li>
+          <li><strong>Expired:</strong> a certificate exists but its validity period has passed, so the client no longer trusts it and warns/refuses.</li>
+          <li><strong>Self-signed:</strong> the certificate is signed by the server itself, not a trusted CA, so the client cannot verify its authenticity and shows a warning.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q2</span><span>Why does a certificate that was valid yesterday stop being trusted once its expiry date passes?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Trust is deliberately time-limited. The expiry date is part of what the CA signed, and clients enforce it so that credentials must be periodically re-verified and renewed. Beyond expiry there is no current assurance the key is still safe or the details still accurate, so the certificate is treated as untrusted regardless of past validity.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q3</span><span>A self-signed certificate still encrypts the connection. Explain why clients nonetheless warn about it, referring to the CA.</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Encryption alone does not prove who is at the other end. A self-signed certificate has not been verified and signed by a trusted Certificate Authority, so there is nothing to confirm the server's claimed identity — an attacker could equally self-sign a certificate while impersonating the site. The client warns because the connection may be private but the identity is unverified, leaving it open to a man-in-the-middle.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q4</span><span>Why is it a security problem when users become accustomed to clicking past certificate warnings?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>Certificate warnings are meant to signal genuine danger, such as an interception or an impersonated site. If users routinely dismiss them (for example because a site's own certificate is often misconfigured), they lose their value as a warning and users will also click past the warnings that indicate a real attack, defeating the protection.</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="q"><span class="tag">Q5</span><span>Automated issuance and renewal (as offered by Let's Encrypt) directly address one of these failures. Which one, and how?</span></div>
+      <div class="a"><span class="label">Suggested answer</span>
+        <p>They address the expired-certificate failure. By issuing certificates automatically and renewing them before they expire without manual intervention, the process ensures a valid certificate is always in place, so sites are far less likely to be left serving an expired one.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
